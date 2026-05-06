@@ -418,7 +418,7 @@ sequenceDiagram
 | E-01 | `user.Events.GroupMemberAdded` | service-user | `groupId`, `userId` | service-bug | Updates UserGroupMembershipReadModel for auth policies |
 | E-02 | `user.Events.GroupMemberRemoved` | service-user | `groupId`, `userId` | service-bug | Removes group from membership read model |
 | E-03 | `user.Events.UserCreated` | service-user | `userId`, `email`, etc. | service-bug | Seeds user in membership read models |
-| E-04 | `user.Events.UserPreferencesChanged` | service-user | preference data | service-notification | Updates NotificationPreferencesReadModel |
+| E-04 | `user.Events.EmailPreferencesUpdated` | service-user | preference data | service-notification | Updates NotificationPreferencesReadModel |
 | E-05 | `user.Events.GroupMemberAdded` | service-user | `groupId`, `userId` | service-notification | Updates watcher/visibility models |
 | E-06 | `user.Events.GroupMemberRemoved` | service-user | `groupId`, `userId` | service-notification | Updates watcher/visibility models |
 | E-07 | `product.Events.ProductCreated` | service-product | product data, `allowsUnconfirmed` | service-bug | Projects ProductInfoReadModel |
@@ -456,9 +456,9 @@ sequenceDiagram
 | E-39 | `attachment.Events.AttachmentCreated` | service-attachment | `attachmentId`, `bugId`, metadata | service-comment | Creates system comment type 5 |
 | E-40 | `attachment.Events.AttachmentUpdated` | service-attachment | `attachmentId`, `bugId`, metadata | service-comment | Creates system comment type 6 |
 | E-41 | `attachment.Events.AttachmentCreated` | service-attachment | `attachmentId`, `bugId`, metadata | service-notification | Sends new-attachment email |
-| E-42 | `attachment.Events.FlagSet` | service-attachment | flag data, `requestee` | service-notification | Sends flag-requested email |
-| E-43 | `attachment.Events.FlagGranted` | service-attachment | flag data | service-notification | Sends flag-granted email to setter + requestee |
-| E-44 | `attachment.Events.FlagDenied` | service-attachment | flag data | service-notification | Sends flag-denied email to setter + requestee |
+| E-42 | `attachment.Events.AttachmentFlagRequested` / `attachment.Events.BugFlagRequested` | service-attachment | flag data, `requestee` | service-notification | Sends flag-requested email (one decorator per event variant on `FlagNotificationHandler`) |
+| E-43 | `attachment.Events.AttachmentFlagGranted` / `attachment.Events.BugFlagGranted` | service-attachment | flag data | service-notification | Sends flag-granted email to setter + requestee (one decorator per event variant) |
+| E-44 | `attachment.Events.AttachmentFlagDenied` / `attachment.Events.BugFlagDenied` | service-attachment | flag data | service-notification | Sends flag-denied email to setter + requestee (one decorator per event variant) |
 | E-45 | `attachment.Events.AttachmentMarkedObsolete` | service-attachment | `attachmentId` | service-attachment (internal) | Cancels all pending `?` flags |
 
 **Event sizing**: BugCreated ~2-5 KB, BugUpdated ~1-8 KB, CommentCreated ~1-5 KB, flag events ~0.5-1 KB. Estimated peak throughput: 100 events/sec, ~300 KB/sec on RabbitMQ. [source: output/phase-4-architecture/interaction-map.md — Section 7.2]

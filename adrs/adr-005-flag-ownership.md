@@ -41,7 +41,7 @@ The `target_type` attribute (`bug` vs `attachment`) is modeled as a field on the
 - **Events**: The service emits `BugFlagSet`, `BugFlagCleared`, `BugFlagGranted`, `BugFlagDenied` for bug-level flags, alongside the attachment-flag equivalents. These are broadcast on the message bus.
 - **Read models for service-bug**: `service-bug` subscribes to `service-attachment.Events.BugFlagSet`, `service-attachment.Events.BugFlagCleared`, etc., and projects a `BugFlagListReadModel` that provides bug-level flag visibility without cross-service queries.
 - **FlagType aggregate**: Lives in `service-attachment` as a single authority for flag type definitions, inclusion/exclusion rules, and group permission configuration.
-- **Retargeting**: When `service-bug` emits `BugMoved` (bug changes product/component), `service-attachment` subscribes and runs retargeting for all flags — both bug-level and attachment-level — in a single handler, using its local flag type inclusion/exclusion data.
+- **Retargeting**: When `service-bug` emits `BugProductChanged` (bug changes product/component), `service-attachment` subscribes and runs retargeting for all flags — both bug-level and attachment-level — in a single handler, using its local flag type inclusion/exclusion data.
 
 ### Authorization
 
@@ -84,4 +84,4 @@ The `target_type` attribute (`bug` vs `attachment`) is modeled as a field on the
 **Rejected because**:
 - Adding an eighth service for a subsystem that is already tightly coupled to both bugs and attachments introduces operational overhead (Docker container, message bus routing, monitoring) disproportionate to the domain complexity.
 - Flag operations are always in the context of a bug or attachment — there are no standalone flag workflows. A dedicated service would be a pass-through for context that lives elsewhere.
-- The retargeting problem remains: `service-flags` would need to subscribe to `BugMoved` from `service-bug` and `AttachmentCreated` from `service-attachment`, and would need read access to product/component configuration for inclusion/exclusion resolution — creating a hub of dependencies rather than reducing coupling.
+- The retargeting problem remains: `service-flags` would need to subscribe to `BugProductChanged` from `service-bug` and `AttachmentCreated` from `service-attachment`, and would need read access to product/component configuration for inclusion/exclusion resolution — creating a hub of dependencies rather than reducing coupling.

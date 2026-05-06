@@ -6,6 +6,8 @@
 
 > `service-search` is a **pure query/projection service** that owns the Elasticsearch-based search engine for bugs, saved search CRUD, quicksearch parsing, boolean chart query translation, and reporting/chart aggregations. It is a **leaf service** (Level 3 in dependency topology) and a **Conformist** to `service-bug`, `service-product`, `service-comment`, and `service-attachment`. [source: output/phase-4-architecture/services/service-search.md:10] [source: output/phase-4-architecture/services/service-search.md:599]
 
+> **Resolved (2026-05-06)**: Scheduled-report (Whine) ownership has been removed from `service-search`. The `ScheduledReportAggregate`, `Create/Update/DeleteScheduledReportCommandHandler`, and `search:report:*` permissions previously listed in this diagram are now owned exclusively by `service-notification` — see `audit-output/c4/component-notification.md`. `service-search` retains `SavedSearchAggregate` (CRUD-mode) only and is consumed by the Whine scheduler via the synchronous `ExecuteSavedSearch` query.
+
 ---
 
 ## Diagram
@@ -19,16 +21,14 @@ C4Component
         %% ── Command Handlers ──────────────────────────────────────
         Component(create_ss, "CreateSavedSearchCommandHandler", "@CommandHandlerDecorator(CreateSavedSearch)", "SavedSearchAggregate (new)")
         Component(update_ss, "UpdateSavedSearchCommandHandler", "@CommandHandlerDecorator(UpdateSavedSearch)", "OwnsSearchPolicy")
-        Component(delete_ss, "DeleteSavedSearchCommandHandler", "@CommandHandlerDecorator(DeleteSavedSearch)", "OwnsSearchPolicy + NotUsedByReportPolicy")
+        Component(delete_ss, "DeleteSavedSearchCommandHandler", "@CommandHandlerDecorator(DeleteSavedSearch)", "OwnsSearchPolicy")
         Component(share_ss, "ShareSavedSearchCommandHandler", "@CommandHandlerDecorator(ShareSavedSearch)", "OwnsSearchPolicy + GroupExistsPolicy")
         Component(unshare_ss, "UnshareSavedSearchCommandHandler", "@CommandHandlerDecorator(UnshareSavedSearch)", "OwnsSearchPolicy")
         Component(toggle_fl, "ToggleFooterLinkCommandHandler", "@CommandHandlerDecorator(ToggleFooterLink)", "SearchVisibilityPolicy")
-        Component(create_sr, "CreateScheduledReportCommandHandler", "@CommandHandlerDecorator(CreateScheduledReport)", "ScheduledReportAggregate (new)")
-        Component(update_sr, "UpdateScheduledReportCommandHandler", "@CommandHandlerDecorator(UpdateScheduledReport)", "OwnsReportPolicy")
-        Component(delete_sr, "DeleteScheduledReportCommandHandler", "@CommandHandlerDecorator(DeleteScheduledReport)", "OwnsReportPolicy")
 
         %% ── Query Handlers ────────────────────────────────────────
         Component(exec_search, "ExecuteSearchQueryHandler", "@QueryHandlerDecorator(ExecuteSearch)", "Elasticsearch bugs index + security-filter")
+        Component(exec_saved, "ExecuteSavedSearchQueryHandler", "@QueryHandlerDecorator(ExecuteSavedSearch)", "Server-to-server query for service-notification's Whine scheduler")
         Component(quicksearch, "QuicksearchQueryHandler", "@QueryHandlerDecorator(Quicksearch)", "Elasticsearch bugs index + quicksearch-parser")
         Component(get_ss, "GetSavedSearchQueryHandler", "@QueryHandlerDecorator(GetSavedSearch)", "SavedSearchListReadModel")
         Component(list_ss, "ListSavedSearchesQueryHandler", "@QueryHandlerDecorator(ListSavedSearches)", "SavedSearchListReadModel")
@@ -38,7 +38,6 @@ C4Component
 
         %% ── Aggregate Roots ───────────────────────────────────────
         Component(ss_agg, "SavedSearchAggregate", "CRUD-mode (not event-sourced)", "@Aggregate('SavedSearchAggregate')")
-        Component(sr_agg, "ScheduledReportAggregate", "Event-sourced", "@Aggregate('ScheduledReportAggregate')")
 
         %% ── Read Models / Projections ─────────────────────────────
         Component(ss_rm, "SavedSearchListReadModel", "@ReadModel(rm_saved_search_list)", "Projects SavedSearch* events")
@@ -71,12 +70,11 @@ C4Component
     Rel(share_ss, ss_agg, "updates sharedGroupId", "CRUD save")
     Rel(unshare_ss, ss_agg, "clears sharedGroupId", "CRUD save")
     Rel(toggle_fl, ss_agg, "updates linkInFooter", "CRUD save")
-    Rel(create_sr, sr_agg, "creates", "event-sourced")
-    Rel(update_sr, sr_agg, "updates", "event-sourced")
-    Rel(delete_sr, sr_agg, "deletes", "event-sourced")
 
     %% ── Query → Read Model / ES relationships
     Rel(exec_search, es_index, "queries", "ES bool + security filter")
+    Rel(exec_saved, ss_rm, "loads saved search", "by savedSearchId")
+    Rel(exec_saved, es_index, "executes search", "ES bool + security filter (acting user)")
     Rel(quicksearch, es_index, "queries", "ES multi_match + security filter")
     Rel(exec_search, sec_filter, "applies", "group visibility filter")
     Rel(quicksearch, sec_filter, "applies", "group visibility filter")
@@ -111,14 +109,12 @@ C4Component
 |-----------|------|-----------|---------|--------|
 | `CreateSavedSearchCommandHandler` | Command Handler | unknown | Creates `SavedSearchAggregate` (CRUD-mode). Permission: `search:saved-search:create`. No Layer-2 policy. | [source: output/phase-4-architecture/services/service-search.md:48] |
 | `UpdateSavedSearchCommandHandler` | Command Handler | unknown | Updates existing `SavedSearchAggregate`. Permission: `search:saved-search:update`. Layer-2: `OwnsSearchPolicy`. | [source: output/phase-4-architecture/services/service-search.md:60] |
-| `DeleteSavedSearchCommandHandler` | Command Handler | unknown | Deletes `SavedSearchAggregate`. Permission: `search:saved-search:delete`. Layer-2: `OwnsSearchPolicy` + `NotUsedByReportPolicy`. | [source: output/phase-4-architecture/services/service-search.md:72] |
+| `DeleteSavedSearchCommandHandler` | Command Handler | unknown | Deletes `SavedSearchAggregate`. Permission: `search:saved-search:delete`. Layer-2: `OwnsSearchPolicy` (the legacy `NotUsedByReportPolicy` was removed 2026-05-06; reconciliation now happens in `service-notification` via `SavedSearchDeleted` subscription). | [source: output/phase-4-architecture/services/service-search.md:72] |
 | `ShareSavedSearchCommandHandler` | Command Handler | unknown | Sets `sharedGroupId`. Permission: `search:saved-search:share`. Layer-2: `OwnsSearchPolicy` + `GroupExistsPolicy`. | [source: output/phase-4-architecture/services/service-search.md:83] |
 | `UnshareSavedSearchCommandHandler` | Command Handler | unknown | Clears `sharedGroupId`. Permission: `search:saved-search:share`. Layer-2: `OwnsSearchPolicy`. | [source: output/phase-4-architecture/services/service-search.md:95] |
 | `ToggleFooterLinkCommandHandler` | Command Handler | unknown | Per-user footer link toggle. Permission: `search:saved-search:footer`. Layer-2: `SearchVisibilityPolicy`. | [source: output/phase-4-architecture/services/service-search.md:107] |
-| `CreateScheduledReportCommandHandler` | Command Handler | unknown | Creates `ScheduledReportAggregate` (event-sourced). Permission: `search:report:create`. No Layer-2 policy. | [source: output/phase-4-architecture/services/service-search.md:119] |
-| `UpdateScheduledReportCommandHandler` | Command Handler | unknown | Updates `ScheduledReportAggregate`. Permission: `search:report:update`. Layer-2: `OwnsReportPolicy`. | [source: output/phase-4-architecture/services/service-search.md:131] |
-| `DeleteScheduledReportCommandHandler` | Command Handler | unknown | Deletes `ScheduledReportAggregate`. Permission: `search:report:delete`. Layer-2: `OwnsReportPolicy`. | [source: output/phase-4-architecture/services/service-search.md:142] |
 | `ExecuteSearchQueryHandler` | Query Handler | unknown | Full structured search via boolean chart AST → Elasticsearch `bool` query with security filter. Permission: `search:execute`. | [source: output/phase-4-architecture/services/service-search.md:157] |
+| `ExecuteSavedSearchQueryHandler` | Query Handler | unknown | Server-to-server query invoked by `service-notification`'s Whine scheduler. Loads a saved search by ID and executes it against the bug index, applying the security filter under the report owner's identity. | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md (ExecuteSavedSearch row)] |
 | `QuicksearchQueryHandler` | Query Handler | unknown | Quicksearch mini-language → Elasticsearch `multi_match`. Permission: `search:execute`. | [source: output/phase-4-architecture/services/service-search.md:168] |
 | `GetSavedSearchQueryHandler` | Query Handler | unknown | Reads `SavedSearchListReadModel`. Permission: `search:saved-search:read`. Layer-2: `SearchVisibilityPolicy`. | [source: output/phase-4-architecture/services/service-search.md:179] |
 | `ListSavedSearchesQueryHandler` | Query Handler | unknown | Reads `SavedSearchListReadModel` for owned + shared searches. Permission: `search:saved-search:read`. | [source: output/phase-4-architecture/services/service-search.md:190] |
@@ -126,7 +122,6 @@ C4Component
 | `GetChartDataQueryHandler` | Query Handler | unknown | Elasticsearch aggregations for time-series chart data. Permission: `search:chart:view`. Layer-2: `SeriesVisibilityPolicy`. | [source: output/phase-4-architecture/services/service-search.md:210] |
 | `GetVisibleSeriesQueryHandler` | Query Handler | unknown | Reads `SeriesCatalogReadModel` filtered by group membership. Permission: `search:chart:view`. | [source: output/phase-4-architecture/services/service-search.md:221] |
 | `SavedSearchAggregate` | Aggregate (CRUD) | unknown | CRUD-mode — not event-sourced (Q16). State: `savedSearchId`, `userId`, `name`, `query`, `sharedGroupId`, `linkInFooter`. Invariant: `name` unique per user. | [source: output/phase-4-architecture/services/service-search.md:24] |
-| `ScheduledReportAggregate` | Aggregate (Event-Sourced) | unknown | Event-sourced aggregate for scheduled email reports (Whine system). State: `reportId`, `savedSearchId`, `userId`, `schedule`, `recipients`, `lastRunAt`, `active`. | [source: output/phase-4-architecture/services/service-search.md:34] |
 | `SavedSearchListReadModel` | Read Model | unknown | Table `rm_saved_search_list`. Projects `SavedSearchCreated/Updated/Deleted/Shared/Unshared`. Fields: `savedSearchId`, `userId`, `name`, `query`, `sharedGroupId`. | [source: output/phase-4-architecture/services/service-search.md:253] |
 | `RecentSearchReadModel` | Read Model | unknown | Table `rm_recent_search`. Per-user search result cache. Capped at `SAVE_NUM_SEARCHES`. Fields: `id`, `userId`, `bugList`, `listOrder`, `createdAt`. | [source: output/phase-4-architecture/services/service-search.md:262] |
 | `SeriesCatalogReadModel` | Read Model | unknown | Table `rm_series_catalog`. Reporting metadata. Fields: `seriesId`, `name`, `category`, `subcategory`, `creator`, `isPublic`, `allowedGroupIds`. | [source: output/phase-4-architecture/services/service-search.md:271] |
@@ -154,10 +149,10 @@ C4Component
 | 1 | [source: output/phase-4-architecture/services/service-search.md:5] | Service name: `service-search`, packages `@evergreen/service-search-contracts` / `@evergreen/service-search` |
 | 2 | [source: output/phase-4-architecture/services/service-search.md:10] | Pure query/projection service; consumes events from bug, product, comment, attachment for Elasticsearch index |
 | 3 | [source: output/phase-4-architecture/services/service-search.md:24] | `SavedSearchAggregate` CRUD-mode, not event-sourced per Q16 |
-| 4 | [source: output/phase-4-architecture/services/service-search.md:34] | `ScheduledReportAggregate` event-sourced for Whine scheduled reports |
+| 4 | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md (ExecuteSavedSearch query row)] | `ExecuteSavedSearch` server-to-server query consumed by `service-notification`'s Whine scheduler (replaces the previously documented `ScheduledReportAggregate` ownership in `service-search`, which was reassigned to `service-notification` on 2026-05-06) |
 | 5 | [source: output/phase-4-architecture/services/service-search.md:48] | `CreateSavedSearchCommandHandler` — no Layer-2 policy |
 | 6 | [source: output/phase-4-architecture/services/service-search.md:63] | `OwnsSearchPolicy` — only owner may update |
-| 7 | [source: output/phase-4-architecture/services/service-search.md:75] | `NotUsedByReportPolicy` — blocks delete if referenced by `ScheduledReportAggregate` |
+| 7 | [source: audit-output/decision-rules.md "Duplicates and Conflicts" — Surprise #2 resolution 2026-05-06] | `NotUsedByReportPolicy` removed from `service-search`; deletion-side reconciliation now lives in `service-notification` via a `SavedSearchDeleted` event subscription |
 | 8 | [source: output/phase-4-architecture/services/service-search.md:86] | `GroupExistsPolicy` — validates target group for `ShareSavedSearch` |
 | 9 | [source: output/phase-4-architecture/services/service-search.md:110] | `SearchVisibilityPolicy` — owner or shared group member for `ToggleFooterLink` |
 | 10 | [source: output/phase-4-architecture/services/service-search.md:157] | `ExecuteSearchQueryHandler` — boolean chart AST → Elasticsearch bool query |

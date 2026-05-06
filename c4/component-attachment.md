@@ -197,7 +197,7 @@ C4Component
 7. **BugFlagListReadModel — table `rm_bug_flag_list`, projects BugFlagRequested/Granted/Denied/Cleared**: [source: output/phase-4-architecture/services/service-attachment.md:298]
 8. **FlagTypeScopeReadModel — table `rm_flag_type_scope`, stores inclusion/exclusion scopes for FlagTypeApplicabilityPolicy**: [source: output/phase-4-architecture/services/service-attachment.md:342]
 9. **GetAttachmentData query — returns pre-signed URL / stream from object storage**: [source: output/phase-4-architecture/services/service-attachment.md:440]
-10. **BugMovedFlagRetargetHandler — subscribes to BugMoved, retargets or clears flags on product move**: [source: output/phase-4-architecture/services/service-attachment.md:614]
+10. **BugMovedFlagRetargetHandler — subscribes to BugProductChanged, retargets or clears flags on product move**: [source: output/phase-4-architecture/services/service-attachment.md:614]
 11. **BugMovedFlagRetargetHandler subscription listing in interaction-map — `bug.Events.BugProductChanged`**: [source: output/phase-4-architecture/interaction-map.md:387]
 12. **FlagTypeScopeChangeRetargetHandler subscription — `attachment.Events.FlagTypeInclusionsChanged` / `FlagTypeExclusionsChanged`**: [source: output/phase-4-architecture/interaction-map.md:395]
 13. **GroupMembershipProjectionHandler subscription — `user.Events.GroupMemberAdded/Removed`**: [source: output/phase-4-architecture/interaction-map.md:388]

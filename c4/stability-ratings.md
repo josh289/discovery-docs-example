@@ -233,7 +233,7 @@
 | L3 | CCChangedNotificationHandler | notification | unknown | Event subscription; bug.Events.BugCcChanged | [source: audit-output/c4/component-notification.md:39] |
 | L3 | DependencyNotificationHandler | notification | unknown | Event subscription; bug.Events.BugDependencyAdded/Removed | [source: audit-output/c4/component-notification.md:40] |
 | L3 | CommentNotificationHandler | notification | unknown | Event subscription; comment.Events.CommentCreated | [source: audit-output/c4/component-notification.md:41] |
-| L3 | CommentTagNotificationHandler | notification | unknown | Event subscription; comment.Events.CommentTagged | [source: audit-output/c4/component-notification.md:42] |
+| L3 | CommentTagNotificationHandler | notification | unknown | Event subscription; comment.Events.CommentTagAdded / CommentTagRemoved | [source: audit-output/c4/component-notification.md:42] |
 | L3 | AttachmentNotificationHandler | notification | unknown | Event subscription; attachment.Events.AttachmentCreated | [source: audit-output/c4/component-notification.md:43] |
 | L3 | FlagNotificationHandler | notification | unknown | Event subscription; attachment flag events + bug flag events | [source: audit-output/c4/component-notification.md:44] |
 | L3 | UserPreferencesSyncHandler | notification | unknown | Event subscription; user.Events.EmailPreferencesUpdated | [source: audit-output/c4/component-notification.md:45] |

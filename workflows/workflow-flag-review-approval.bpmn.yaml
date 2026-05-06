@@ -59,24 +59,31 @@ nodes:
     type: serviceTask
     label: Create flag with status '?' (with requestee)
     command: attachment.Commands.SetAttachmentFlag
-    event: attachment.Events.FlagSet
+    event: attachment.Events.AttachmentFlagRequested
+    notes: >
+      For bug-level flags the command is attachment.Commands.SetBugFlag and
+      the emitted event is attachment.Events.BugFlagRequested.
 
   - id: create-flag-no-requestee
     type: serviceTask
     label: Create flag with status '?' (requestee dropped — skip_requestee_on_error)
     command: attachment.Commands.SetAttachmentFlag
-    event: attachment.Events.FlagSet
+    event: attachment.Events.AttachmentFlagRequested
+    notes: >
+      For bug-level flags the command is attachment.Commands.SetBugFlag and
+      the emitted event is attachment.Events.BugFlagRequested.
 
   - id: notify-requestee
     type: serviceTask
     label: Send review-request email to requestee (and CC list)
-    event: attachment.Events.FlagSet
+    event: attachment.Events.AttachmentFlagRequested
     notes: >
-      service-notification subscribes to FlagSet events. Email is sent to:
-      the requestee (new review request), anyone on the flag type's cc_list
-      (filtered by bug group visibility and private attachment visibility).
-      If requestee has requestee_cc preference enabled, they are auto-added
-      to the bug's CC list.
+      service-notification subscribes to both attachment.Events.AttachmentFlagRequested
+      and attachment.Events.BugFlagRequested. Email is sent to: the requestee
+      (new review request), anyone on the flag type's cc_list (filtered by
+      bug group visibility and private attachment visibility). If requestee
+      has requestee_cc preference enabled, they are auto-added to the bug's
+      CC list.
 
   - id: wait-for-review-decision
     type: userTask
@@ -99,37 +106,43 @@ nodes:
     type: serviceTask
     label: Grant flag — set status '+'
     command: attachment.Commands.SetAttachmentFlag
-    event: attachment.Events.FlagGranted
+    event: attachment.Events.AttachmentFlagGranted
     notes: >
       Validates setter is in the flag type's grant_group (or grant_group is
       null = anyone can grant). For bug-level flags, the command is
-      attachment.Commands.SetBugFlag.
+      attachment.Commands.SetBugFlag and the emitted event is
+      attachment.Events.BugFlagGranted.
 
   - id: deny-flag
     type: serviceTask
     label: Deny flag — set status '-'
     command: attachment.Commands.SetAttachmentFlag
-    event: attachment.Events.FlagDenied
+    event: attachment.Events.AttachmentFlagDenied
     notes: >
       Same authorization check as grant. For bug-level flags, the command
-      is attachment.Commands.SetBugFlag.
+      is attachment.Commands.SetBugFlag and the emitted event is
+      attachment.Events.BugFlagDenied.
 
   - id: notify-setter-granted
     type: serviceTask
     label: Notify setter that flag was granted
-    event: attachment.Events.FlagGranted
+    event: attachment.Events.AttachmentFlagGranted
     notes: >
-      service-notification subscribes to FlagGranted events. Email is sent
-      to: the original setter (their ? request was fulfilled), anyone on
-      the flag type's cc_list (filtered by visibility).
+      service-notification subscribes to both
+      attachment.Events.AttachmentFlagGranted and
+      attachment.Events.BugFlagGranted. Email is sent to: the original
+      setter (their ? request was fulfilled), anyone on the flag type's
+      cc_list (filtered by visibility).
 
   - id: notify-setter-denied
     type: serviceTask
     label: Notify setter that flag was denied
-    event: attachment.Events.FlagDenied
+    event: attachment.Events.AttachmentFlagDenied
     notes: >
-      service-notification subscribes to FlagDenied events. Same recipient
-      resolution as notify-setter-granted.
+      service-notification subscribes to both
+      attachment.Events.AttachmentFlagDenied and
+      attachment.Events.BugFlagDenied. Same recipient resolution as
+      notify-setter-granted.
 
   - id: end-granted
     type: endEvent
@@ -172,13 +185,13 @@ nodes:
     type: startEvent
     label: Bug moved to a different product or component
     notes: >
-      Triggered by service-bug emitting bug.Events.BugMoved.
+      Triggered by service-bug emitting bug.Events.BugProductChanged.
 
   - id: retarget-flags
     type: serviceTask
     label: Retarget flags to new product/component inclusion/exclusion rules
     notes: >
-      service-attachment subscribes to bug.Events.BugMoved. For each flag
+      service-attachment subscribes to bug.Events.BugProductChanged. For each flag
       on the bug (and its attachments), attempts to find an active flag
       type with the same name in the new product/component. If found,
       updates the flag's type_id. If not found, the flag is deleted with

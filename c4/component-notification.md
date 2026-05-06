@@ -3,6 +3,8 @@
 > Service-doc materialized at `output/phase-4-architecture/services/service-notification.md`.
 > Terminal event consumer per ADR-006; emits no domain events. Cross-referenced with interaction-map.md subscription catalog.
 
+> **Resolved (2026-05-06)**: This service is the **sole owner** of scheduled reports (the Whine system). The `ScheduledReportAggregate`, `CreateScheduledReportHandler`, `UpdateScheduledReportHandler`, `DeleteScheduledReportHandler`, `ScheduledReportReadModel`, and `notifications:schedule:*` permissions shown below are canonical. Any earlier diagrams that placed `ScheduledReportAggregate` (or `search:report:*` permissions) inside `service-search` are obsolete — see `audit-output/c4/component-search.md` for the resolution note on the search side.
+
 ## Diagram
 
 ```mermaid
@@ -25,7 +27,7 @@ C4Component
 
         Component(report_agg, "ScheduledReportAggregate", "@Aggregate('ScheduledReport')", "Event-sourced; owns Whine scheduled-report lifecycle")
 
-        Component(prefs_rm, "NotificationPreferencesReadModel", "@ReadModel(rm_notification_preferences)", "Projected from user.Events.UserPreferencesChanged + direct command writes")
+        Component(prefs_rm, "NotificationPreferencesReadModel", "@ReadModel(rm_notification_preferences)", "Projected from user.Events.EmailPreferencesUpdated + direct command writes")
         Component(watcher_rm, "WatcherMapReadModel", "@ReadModel(rm_watcher_map)", "Projected from user.Events.UserWatchingChanged + direct command writes")
         Component(report_rm, "ScheduledReportReadModel", "@ReadModel(rm_scheduled_report)", "Projected from ScheduledReportCreated/Updated/Deleted/Executed")
         Component(delivery_rm, "EmailDeliveryLogReadModel", "@ReadModel(rm_email_delivery_log)", "Written by subscription handlers after dispatch")
@@ -40,7 +42,7 @@ C4Component
         Component(sub_cc, "CCChangedNotificationHandler", "@EventHandlerDecorator('bug.Events.BugCcChanged')", "CC add/remove notification")
         Component(sub_dep, "DependencyNotificationHandler", "@EventHandlerDecorator('bug.Events.BugDependencyAdded' / 'bug.Events.BugDependencyRemoved')", "Dependency notification")
         Component(sub_comment, "CommentNotificationHandler", "@EventHandlerDecorator('comment.Events.CommentCreated')", "New comment email")
-        Component(sub_comment_tag, "CommentTagNotificationHandler", "@EventHandlerDecorator('comment.Events.CommentTagged')", "Tag change notification (low priority)")
+        Component(sub_comment_tag, "CommentTagNotificationHandler", "@EventHandlerDecorator('comment.Events.CommentTagAdded' / 'comment.Events.CommentTagRemoved')", "Tag-added/removed notification (low priority)")
         Component(sub_attach, "AttachmentNotificationHandler", "@EventHandlerDecorator('attachment.Events.AttachmentCreated')", "New attachment email")
         Component(sub_flag, "FlagNotificationHandler", "@EventHandlerDecorator('attachment.Events.AttachmentFlagRequested' / 'Granted' / 'Denied' / 'Cleared' + bug-level equivalents)", "Flag state change email")
         Component(sub_prefs_sync, "UserPreferencesSyncHandler", "@EventHandlerDecorator('user.Events.EmailPreferencesUpdated')", "Sync notification preferences from service-user")
@@ -126,13 +128,13 @@ flowchart LR
 
     subgraph from_attachment["from service-attachment"]
         ac["AttachmentCreated (E-41)"]:::event
-        fs["FlagSet (E-42)"]:::event
-        fg["FlagGranted (E-43)"]:::event
-        fd["FlagDenied (E-44)"]:::event
+        fs["AttachmentFlagRequested / BugFlagRequested (E-42)"]:::event
+        fg["AttachmentFlagGranted / BugFlagGranted (E-43)"]:::event
+        fd["AttachmentFlagDenied / BugFlagDenied (E-44)"]:::event
     end
 
     subgraph from_user["from service-user"]
-        upc["UserPreferencesChanged (E-04)"]:::event
+        upc["EmailPreferencesUpdated (E-04)"]:::event
         gma["GroupMemberAdded (E-05)"]:::event
         gmr["GroupMemberRemoved (E-06)"]:::event
     end

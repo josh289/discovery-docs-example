@@ -16,7 +16,7 @@
 | **editbugs_group_member** | ADR-006 (editbugs control flag), `CanChangeFieldPolicy`, `CanCommentOnBugPolicy`, `CanSeeBugPolicy` | Group membership check: user's groups intersect bug-product's groups where `editbugs=true` | `UserGroupMembershipReadModel` (from `user.Events.GroupMemberAdded/Removed`) + `ProductGroupControlsReadModel` (from `product.Events.GroupControlsUpdated`) |
 | **canconfirm_group_member** | ADR-006 (canconfirm control flag), `CanConfirmBugPolicy` | Group membership check: user's groups have `canconfirm=true` for bug's product | `UserGroupMembershipReadModel` + `ProductGroupControlsReadModel` |
 | **canedit_group_member** | ADR-006 (canedit control flag), `RemoveCc` command description | Group membership check: user's groups have `canedit=true` for bug's product | `UserGroupMembershipReadModel` + `ProductGroupControlsReadModel` |
-| **bugs_admin** | `UpdateStatusWorkflowConfig` actor ("Administrators with `bugs:admin_workflow` permission only") | JWT claim: `bugs:admin_workflow` permission string | None — enforced at gateway (Layer 1) |
+| **bugs_admin** | `UpdateStatusWorkflowConfig` actor ("Administrators with `bugs:admin_workflow` permission only") | JWT claim: `bugs:admin_workflow` permission string + `admin` group membership | `IsWorkflowAdminPolicy` (added 2026-05-06) — caller must be in `admin` group AND hold `bugs:admin_workflow`; gates all 7 StatusWorkflowConfig mutation commands |
 | **timetracking_user** | `UpdateTimetracking` actor ("Users with `bugs:edit_timetracking` permission only") | JWT claim: `bugs:edit_timetracking` permission string | None — enforced at gateway (Layer 1) |
 | **insider** | `IsInsiderPolicy` and `CanSeePrivateCommentsPolicy` in service-comment spec | Group membership: user is member of the insider group; also linked to `comments:view:private` permission | `service-user` read models or `comments:view:private` JWT claim [source: output/phase-5-specification/specs/service-comment/SERVICE_SPEC.md:207] |
 | **comment_tagger** | `IsCommentTaggerPolicy` | Group membership: user is member of `comment_taggers_group` site parameter | `service-user` read models for group membership [source: output/phase-5-specification/specs/service-comment/SERVICE_SPEC.md:208] |
@@ -55,7 +55,7 @@
 | authenticated_user | bug | remove see-also | `bugs:update` | — | [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:254] |
 | authenticated_user | bug | update custom field | `bugs:update` | `MandatoryFieldPolicy` (rejects clearing mandatory fields) | [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:255,278] |
 | timetracking_user | bug | update time-tracking | `bugs:edit_timetracking` | — | [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:256] |
-| bugs_admin | workflow-config | update | `bugs:admin_workflow` | — | [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:257] |
+| bugs_admin | workflow-config | update | `bugs:admin_workflow` | `IsWorkflowAdminPolicy` — caller must hold `bugs:admin_workflow` AND be in `admin` group; applied to all 7 StatusWorkflowConfig commands (added 2026-05-06) | [source: output/phase-4-architecture/services/service-bug.md#policies-on-statusworkflowconfig-handlers, output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:authorization-layer-2] |
 | authenticated_user | bug | read (get) | `(authenticated)` | `CanSeeBugPolicy` | [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:258,279] |
 | authenticated_user | bug | search | `(authenticated)` | `CanSeeBugPolicy` (results filtered by visibility) | [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:259,279] |
 | authenticated_user | bug | read history | `(authenticated)` | `CanSeeBugPolicy` + time-tracking entries hidden without `bugs:edit_timetracking` | [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:260] |
@@ -142,19 +142,16 @@
 | saved_search_owner, shared_group_member | saved-search | read | `search:saved-search:read` | `SearchVisibilityPolicy` — owner or member of shared group | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:151,175] |
 | authenticated_user | saved-search | list | `search:saved-search:read` | — | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:152] |
 | saved_search_owner | saved-search | update | `search:saved-search:update` | `OwnsSearchPolicy` — only creator may update | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:153,168] |
-| saved_search_owner | saved-search | delete | `search:saved-search:delete` | `OwnsSearchPolicy` + `NotUsedByReportPolicy` (no scheduled report references it) | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:154,169,170] |
+| saved_search_owner | saved-search | delete | `search:saved-search:delete` | `OwnsSearchPolicy` (`NotUsedByReportPolicy` removed 2026-05-06 — reconciliation now lives in `service-notification` via `SavedSearchDeleted` subscription) | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:154] |
 | saved_search_owner | saved-search | share | `search:saved-search:share` | `OwnsSearchPolicy` + `GroupExistsPolicy` (target group must exist and be active) | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:155,171,172] |
 | saved_search_owner | saved-search | unshare | `search:saved-search:share` | `OwnsSearchPolicy` | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:156,173] |
 | saved_search_owner, shared_group_member | saved-search | toggle footer link | `search:saved-search:footer` | `SearchVisibilityPolicy` | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:157,174] |
 | authenticated_user | chart | read data | `search:chart:view` | `SeriesVisibilityPolicy` — chart series filtered per user group membership | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:158,178] |
 | authenticated_user | chart | read visible series | `search:chart:view` | `SeriesVisibilityPolicy` | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:159,178] |
-| authenticated_user | scheduled-report (search) | create | `search:report:create` | `SavedSearchVisiblePolicy` — referenced saved search must be visible to creator | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:160,179] |
-| scheduled_report_owner | scheduled-report (search) | update | `search:report:update` | `OwnsReportPolicy` — only owner may update | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:161,180] |
-| scheduled_report_owner | scheduled-report (search) | delete | `search:report:delete` | `OwnsReportPolicy` | [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:162,181] |
-| authenticated_user | scheduled-report (notif) | create | `notifications:schedule:create` | — | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:220] |
-| schedule_owner | scheduled-report (notif) | update | `notifications:schedule:update` | `OwnsSchedulePolicy` — caller userId must match `ownerUserId` | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:221,239] |
-| schedule_owner | scheduled-report (notif) | delete | `notifications:schedule:delete` | `OwnsSchedulePolicy` | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:222,240] |
-| schedule_owner | scheduled-report (notif) | read | `notifications:schedule:read` | `OwnsSchedulePolicy` (single-report read) | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:223,224,241] |
+| authenticated_user | scheduled-report | create | `notifications:schedule:create` | — | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:220] |
+| schedule_owner | scheduled-report | update | `notifications:schedule:update` | `OwnsSchedulePolicy` — caller userId must match `ownerUserId` | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:221,239] |
+| schedule_owner | scheduled-report | delete | `notifications:schedule:delete` | `OwnsSchedulePolicy` | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:222,240] |
+| schedule_owner | scheduled-report | read | `notifications:schedule:read` | `OwnsSchedulePolicy` (single-report read) | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:223,224,241] |
 | self | notification-preferences | update | `notifications:preferences:update` | — | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:225] |
 | self | user-watcher | set | `notifications:preferences:update` | — | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:226] |
 | self | notification-preferences | read | `notifications:preferences:read` | `OwnsPreferencesPolicy` — caller can only read own preferences | [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:227,242] |
@@ -173,7 +170,7 @@
 
 ### Missing Layer 2 Policies
 
-- **`bugs:admin_workflow` has no Layer 2 policy** [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:257]. The `UpdateStatusWorkflowConfig` command is gated only by Layer 1 (`bugs:admin_workflow`). Any user with that JWT claim can modify the global workflow configuration without any domain-level business check. This is a high-privilege operation (adding/removing statuses, transitions) that should have at minimum an `IsAdminPolicy` or `CanModifyWorkflowPolicy` at Layer 2.
+- **[Resolved 2026-05-06] `bugs:admin_workflow` had no Layer 2 policy** [original gap source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:257]. Previously the StatusWorkflowConfig mutation commands were gated only by Layer 1 (`bugs:admin_workflow`); any user with that JWT claim could modify the global workflow configuration without any domain-level business check. **Resolution**: `IsWorkflowAdminPolicy` added in `service-bug` per audit recommendation; all 7 StatusWorkflowConfig commands (`AddWorkflowStatus`, `RemoveWorkflowStatus`, `AddWorkflowTransition`, `RemoveWorkflowTransition`, `UpdateTransitionCommentRequirement`, `AddWorkflowResolution`, `RemoveWorkflowResolution`) now have a Layer 2 domain policy requiring both the `bugs:admin_workflow` claim and `admin` group membership. The previously generic `IsAdminPolicy` was specialized/renamed to `IsWorkflowAdminPolicy` to make the workflow-specific authorization explicit.
 
 - **`bugs:edit_timetracking` has no Layer 2 policy** [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:256]. The `UpdateTimetracking` command relies solely on gateway-enforced `bugs:edit_timetracking`. No domain policy verifies the user should be allowed to edit time-tracking for this specific bug (e.g., only the assignee or a timetracking group member).
 
@@ -201,9 +198,7 @@
 
 - **`CanSetFlagPolicy` overloads three distinct checks under one name** [source: output/phase-5-specification/specs/service-attachment/SERVICE_SPEC.md:379]. It selects between `requestGroupId` (for `?`), `grantGroupId` (for `+`/`-`), and "original setter or grant/request group" (for `X`) based on the requested status. This is similar to the `CanChangeFieldPolicy` anti-pattern in service-bug — the policy's effective rule depends on a command argument, making it harder to audit.
 
-- **`UpdateScheduledReport` exists in two services with different Layer 1 strings** — `search:report:update` in service-search [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:161] and `notifications:schedule:update` in service-notification [source: output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:221]. They guard different aggregates (saved-search reports vs whine reports), but the duplicate command name and overlapping concept ("scheduled report") creates confusion. A reviewer could mistake one for the other.
-
-- **`CreateScheduledReport` likewise exists in both services** with the same naming clash [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:160, output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md:220].
+- **[Resolved 2026-05-06] `Create/Update/DeleteScheduledReport` no longer exist in two services**. Previously `search:report:*` (service-search) and `notifications:schedule:*` (service-notification) both defined parallel scheduled-report command stacks. Resolution: `service-notification` is now the sole owner of scheduled reports. Search-side commands and `search:report:*` permissions have been removed from `service-search/SERVICE_SPEC.md`. `notifications:schedule:create`/`update`/`delete`/`read` is canonical. See `decision-rules.md` "Duplicates and Conflicts" section for the resolution entry.
 
 ### Duplicated Authorization Logic Across Services
 
@@ -360,13 +355,13 @@
 **Layer 1 grants**: `bugs:admin_workflow`, plus likely `bugs:update`, `bugs:create`, etc.
 
 **Layer 2 checks**:
-- `UpdateStatusWorkflowConfig` — **no Layer 2 policy** [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:257]
+- `IsWorkflowAdminPolicy` — caller must hold `bugs:admin_workflow` claim AND be a member of the `admin` group. Applied to all 7 StatusWorkflowConfig commands: `AddWorkflowStatus`, `RemoveWorkflowStatus`, `AddWorkflowTransition`, `RemoveWorkflowTransition`, `UpdateTransitionCommentRequirement`, `AddWorkflowResolution`, `RemoveWorkflowResolution` [source: output/phase-4-architecture/services/service-bug.md#policies-on-statusworkflowconfig-handlers, output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md:authorization-layer-2]
 
 **Effective set**:
-- `workflow-config.update` — add/remove statuses, transitions, resolutions
+- `workflow-config.update` — add/remove statuses, transitions, resolutions (subject to Layer 2 `IsWorkflowAdminPolicy` group check)
 - All standard bug operations (if also holds `bugs:update`)
 
-**Key concern**: The `bugs:admin_workflow` permission has no Layer 2 guard. Any user with this JWT claim can modify the global workflow without domain-level validation beyond what the aggregate enforces (static status protection). This is a significant gap for a high-privilege operation.
+**Key concern (resolved 2026-05-06)**: The `bugs:admin_workflow` permission previously had no Layer 2 guard, meaning any user with this JWT claim could modify the global workflow without domain-level validation beyond what the aggregate enforced (static status protection). `IsWorkflowAdminPolicy` now requires `admin` group membership in addition to the JWT claim, closing the gap for this high-privilege operation.
 
 ---
 
@@ -423,20 +418,21 @@
 **Layer 2 narrows**:
 - `OwnsSearchPolicy` — only the creator may update, delete, share, or unshare the saved search [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:168,169,171,173]
 - `SearchVisibilityPolicy` — read access requires owner or shared-group member [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:174,175]
-- `NotUsedByReportPolicy` — cannot delete a saved search referenced by any `ScheduledReportAggregate` [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:170]
 - `GroupExistsPolicy` — share target group must exist and be active [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:172]
 - Bug security filter — Elasticsearch results are post-filtered by user's group membership and visibility flags regardless of saved-search ownership [source: output/phase-5-specification/specs/service-search/SERVICE_SPEC.md:176,177]
 
+> **Resolved (2026-05-06)**: The previously listed `NotUsedByReportPolicy` (which blocked saved-search deletion if a `ScheduledReportAggregate` referenced it) has been removed from `service-search`. Scheduled reports are now owned by `service-notification`; deletion-side reconciliation is the notification service's responsibility via a `SavedSearchDeleted` event subscription.
+
 **Effective set**:
-- `saved-search.create`, `saved-search.read`, `saved-search.update`, `saved-search.delete` (only when not used by a report), `saved-search.share` (to active groups only), `saved-search.unshare`, `saved-search.toggle-footer`
+- `saved-search.create`, `saved-search.read`, `saved-search.update`, `saved-search.delete`, `saved-search.share` (to active groups only), `saved-search.unshare`, `saved-search.toggle-footer`
 - `search.execute`, `search.quicksearch` — but results are filtered by bug visibility, not by saved-search ownership
 - `chart.read` — when the user has `search:chart:view`
-- `scheduled-report.create` — when referencing a visible saved search
+- `scheduled-report.create` — granted by `notifications:schedule:create` in `service-notification` (not by `service-search`)
 
 **Operations the saved_search_owner CANNOT perform**:
 - Update or delete other users' saved searches
 - See bugs they aren't otherwise authorized for, even if a saved-search query would surface them
-- Create scheduled reports referencing saved searches they cannot see
+- Create scheduled reports referencing saved searches they cannot see (enforced by `service-notification`'s scheduled-report handler)
 
 ---
 
@@ -557,16 +553,11 @@ Handlers declare which field-specific policies they require.
 **Status quo cost**: Medium — seven duplicated policies inflate the test surface and create drift risk if one is updated and others aren't.
 **Migration cost**: Low — extract a shared base class, swap in each service.
 
-### 8. Disambiguate `ScheduledReport` Across Service-Search and Service-Notification
+### 8. Disambiguate `ScheduledReport` Across Service-Search and Service-Notification — **RESOLVED (2026-05-06)**
 
-**Problem**: Both `service-search` and `service-notification` define commands named `CreateScheduledReport`, `UpdateScheduledReport`, `DeleteScheduledReport` with overlapping but distinct semantics [sources: service-search 160–162; service-notification 220–222]. They guard different aggregates (ScheduledReportAggregate in search vs whine reports in notification) but share the prefix `ScheduledReport`. The Layer 1 strings (`search:report:*` vs `notifications:schedule:*`) disambiguate at the gateway, but a code reviewer reading a contract reference cannot tell which service is being invoked without checking the package.
+**Original problem**: Both `service-search` and `service-notification` defined commands named `CreateScheduledReport`, `UpdateScheduledReport`, `DeleteScheduledReport` with overlapping semantics, guarded by parallel permission stacks (`search:report:*` vs `notifications:schedule:*`).
 
-**Recommendation**: Rename one set. Either:
-- Rename service-search's commands to `CreateSearchReport`/etc. (since they target saved searches) — preferred because "scheduled report" is the canonical Bugzilla "whine" terminology and service-notification owns the whine pipeline.
-- Or merge: have service-search's `CreateScheduledReport` produce an event consumed by service-notification, eliminating the parallel command.
-
-**Status quo cost**: Low — gateway routing is unambiguous; the cost is reviewer confusion.
-**Migration cost**: Medium — coordinated rename across contracts, frontend command-builders, and Gherkin scenarios.
+**Resolution applied**: `service-notification` is the sole owner of scheduled reports. The search-side `ScheduledReportAggregate`, `Create/Update/DeleteScheduledReport` commands, and `search:report:*` permissions have been removed. The notification-side `ScheduledReportAggregate` and `notifications:schedule:*` permissions are canonical. `service-search` retains saved-search CRUD only and exposes the `ExecuteSavedSearch` query, which the Whine scheduler in `service-notification` calls on a background timer.
 
 ### 9. Consolidate `editbugs` Group Lookup Across service-bug, service-comment, and service-attachment
 

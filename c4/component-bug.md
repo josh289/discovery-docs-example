@@ -43,13 +43,13 @@ C4Component
         Component(remgrp_h, "RemoveBugGroupHandler", "@CommandHandlerDecorator(RemoveBugGroup)", "CanEditBugPolicy")
 
         %% ── Command Handlers — StatusWorkflowConfig ─────────────────
-        Component(addws_h, "AddWorkflowStatusHandler", "@CommandHandlerDecorator(AddWorkflowStatus)", "IsAdminPolicy")
-        Component(remws_h, "RemoveWorkflowStatusHandler", "@CommandHandlerDecorator(RemoveWorkflowStatus)", "IsAdminPolicy")
-        Component(addwt_h, "AddWorkflowTransitionHandler", "@CommandHandlerDecorator(AddWorkflowTransition)", "IsAdminPolicy")
-        Component(remwt_h, "RemoveWorkflowTransitionHandler", "@CommandHandlerDecorator(RemoveWorkflowTransition)", "IsAdminPolicy")
-        Component(uptc_h, "UpdateTransCommentReqHandler", "@CommandHandlerDecorator(UpdateTransitionCommentRequirement)", "IsAdminPolicy")
-        Component(addwr_h, "AddWorkflowResolutionHandler", "@CommandHandlerDecorator(AddWorkflowResolution)", "IsAdminPolicy")
-        Component(remwr_h, "RemoveWorkflowResolutionHandler", "@CommandHandlerDecorator(RemoveWorkflowResolution)", "IsAdminPolicy")
+        Component(addws_h, "AddWorkflowStatusHandler", "@CommandHandlerDecorator(AddWorkflowStatus)", "IsWorkflowAdminPolicy")
+        Component(remws_h, "RemoveWorkflowStatusHandler", "@CommandHandlerDecorator(RemoveWorkflowStatus)", "IsWorkflowAdminPolicy")
+        Component(addwt_h, "AddWorkflowTransitionHandler", "@CommandHandlerDecorator(AddWorkflowTransition)", "IsWorkflowAdminPolicy")
+        Component(remwt_h, "RemoveWorkflowTransitionHandler", "@CommandHandlerDecorator(RemoveWorkflowTransition)", "IsWorkflowAdminPolicy")
+        Component(uptc_h, "UpdateTransCommentReqHandler", "@CommandHandlerDecorator(UpdateTransitionCommentRequirement)", "IsWorkflowAdminPolicy")
+        Component(addwr_h, "AddWorkflowResolutionHandler", "@CommandHandlerDecorator(AddWorkflowResolution)", "IsWorkflowAdminPolicy")
+        Component(remwr_h, "RemoveWorkflowResolutionHandler", "@CommandHandlerDecorator(RemoveWorkflowResolution)", "IsWorkflowAdminPolicy")
 
         %% ── Query Handlers ──────────────────────────────────────────
         Component(get_q, "GetBugHandler", "@QueryHandlerDecorator(GetBug)", "Reads BugDetailReadModel")
@@ -131,7 +131,7 @@ C4Component
         Component(pol_time, "CanEditTimeTrackingPolicy", "@RequirePolicy('CanEditTimeTrackingPolicy')", "timetrackinggroup membership")
         Component(pol_dup, "CanMarkDuplicatePolicy", "@RequirePolicy('CanMarkDuplicatePolicy')", "Visible target bug + valid transition")
         Component(pol_prod, "CanChangeProductPolicy", "@RequirePolicy('CanChangeProductPolicy')", "Entry access to new product")
-        Component(pol_admin, "IsAdminPolicy", "@RequirePolicy('IsAdminPolicy')", "admin:workflow + admin group")
+        Component(pol_workflow_admin, "IsWorkflowAdminPolicy", "@RequirePolicy('IsWorkflowAdminPolicy')", "admin group + bugs:admin_workflow claim; gates all StatusWorkflowConfig mutations")
     }
 
     %% ── Relationships: Command Handlers → Aggregates ────────────────
@@ -162,6 +162,15 @@ C4Component
     Rel(uptc_h, sw_agg, "updates comment req", "StatusWorkflowConfig")
     Rel(addwr_h, sw_agg, "adds resolution", "StatusWorkflowConfig.addResolution")
     Rel(remwr_h, sw_agg, "removes resolution", "StatusWorkflowConfig.removeResolution")
+
+    %% ── Relationships: StatusWorkflowConfig Handlers → IsWorkflowAdminPolicy ─
+    Rel(addws_h, pol_workflow_admin, "runs", "IsWorkflowAdminPolicy")
+    Rel(remws_h, pol_workflow_admin, "runs", "IsWorkflowAdminPolicy")
+    Rel(addwt_h, pol_workflow_admin, "runs", "IsWorkflowAdminPolicy")
+    Rel(remwt_h, pol_workflow_admin, "runs", "IsWorkflowAdminPolicy")
+    Rel(uptc_h, pol_workflow_admin, "runs", "IsWorkflowAdminPolicy")
+    Rel(addwr_h, pol_workflow_admin, "runs", "IsWorkflowAdminPolicy")
+    Rel(remwr_h, pol_workflow_admin, "runs", "IsWorkflowAdminPolicy")
 
     %% ── Relationships: Query Handlers → Read Models ─────────────────
     Rel(get_q, detail_rm, "reads", "BugDetailReadModel")
@@ -247,13 +256,13 @@ C4Component
 
 | Component | Type | Stability | Target Aggregate | Layer-2 Policies | Source |
 |-----------|------|-----------|-----------------|------------------|--------|
-| `AddWorkflowStatusHandler` | Command Handler | unknown | StatusWorkflowConfig | IsAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:121] |
-| `RemoveWorkflowStatusHandler` | Command Handler | unknown | StatusWorkflowConfig | IsAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:122] |
-| `AddWorkflowTransitionHandler` | Command Handler | unknown | StatusWorkflowConfig | IsAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:123] |
-| `RemoveWorkflowTransitionHandler` | Command Handler | unknown | StatusWorkflowConfig | IsAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:124] |
-| `UpdateTransCommentReqHandler` | Command Handler | unknown | StatusWorkflowConfig | IsAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:125] |
-| `AddWorkflowResolutionHandler` | Command Handler | unknown | StatusWorkflowConfig | IsAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:126] |
-| `RemoveWorkflowResolutionHandler` | Command Handler | unknown | StatusWorkflowConfig | IsAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:127] |
+| `AddWorkflowStatusHandler` | Command Handler | unknown | StatusWorkflowConfig | IsWorkflowAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:121] |
+| `RemoveWorkflowStatusHandler` | Command Handler | unknown | StatusWorkflowConfig | IsWorkflowAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:122] |
+| `AddWorkflowTransitionHandler` | Command Handler | unknown | StatusWorkflowConfig | IsWorkflowAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:123] |
+| `RemoveWorkflowTransitionHandler` | Command Handler | unknown | StatusWorkflowConfig | IsWorkflowAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:124] |
+| `UpdateTransCommentReqHandler` | Command Handler | unknown | StatusWorkflowConfig | IsWorkflowAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:125] |
+| `AddWorkflowResolutionHandler` | Command Handler | unknown | StatusWorkflowConfig | IsWorkflowAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:126] |
+| `RemoveWorkflowResolutionHandler` | Command Handler | unknown | StatusWorkflowConfig | IsWorkflowAdminPolicy | [source: output/phase-4-architecture/services/service-bug.md:127] |
 
 ### Query Handlers
 
@@ -452,7 +461,7 @@ flowchart LR
 | `CanEditTimeTrackingPolicy` | Policy | unknown | UpdateBug (time-tracking fields) | timetrackinggroup membership | [source: output/phase-4-architecture/services/service-bug.md:373] |
 | `CanMarkDuplicatePolicy` | Policy | unknown | MarkBugDuplicate | Visible target bug + valid transition | [source: output/phase-4-architecture/services/service-bug.md:374] |
 | `CanChangeProductPolicy` | Policy | unknown | SetBugProduct | Entry access to new product | [source: output/phase-4-architecture/services/service-bug.md:375] |
-| `IsAdminPolicy` | Policy | unknown | All StatusWorkflowConfig commands | admin:workflow permission + admin group | [source: output/phase-4-architecture/services/service-bug.md:381] |
+| `IsWorkflowAdminPolicy` | Policy | unknown | AddWorkflowStatus, RemoveWorkflowStatus, AddWorkflowTransition, RemoveWorkflowTransition, UpdateTransitionCommentRequirement, AddWorkflowResolution, RemoveWorkflowResolution | admin:workflow permission + admin group membership; explicit workflow-admin guard | [source: output/phase-4-architecture/services/service-bug.md] |
 
 ---
 

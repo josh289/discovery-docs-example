@@ -84,7 +84,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    startMoved(("Bug moved to different<br>product/component<br>(bug.Events.BugMoved)"))
+    startMoved(("Bug moved to different<br>product/component<br>(bug.Events.BugProductChanged)"))
 
     subgraph attachment["service-attachment"]
         retarget["retarget-flags<br>Retarget flags to new<br>product/component rules"]
@@ -123,9 +123,9 @@ flowchart LR
 
 | Service | Role | Responsibility |
 |---------|------|----------------|
-| `service-attachment` | **Initiator** | Owns all flag aggregates, flag types, inclusion/exclusion rules. Processes `SetAttachmentFlag`, `SetBugFlag`, and `MarkAttachmentObsolete` commands. Subscribes to `BugMoved` events for retargeting. |
+| `service-attachment` | **Initiator** | Owns all flag aggregates, flag types, inclusion/exclusion rules. Processes `SetAttachmentFlag`, `SetBugFlag`, and `MarkAttachmentObsolete` commands. Subscribes to `BugProductChanged` events for retargeting. |
 | `service-notification` | **Participant** | Subscribes to `FlagSet`, `FlagGranted`, `FlagDenied`, and `AttachmentFlagCleared` events. Resolves recipients (requestee, setter, CC list) filtered by bug group visibility and private attachment visibility. Renders and delivers email. |
-| `service-bug` | **Participant** | Emits `BugMoved` events when a bug's product or component changes. This triggers flag retargeting in `service-attachment`. |
+| `service-bug` | **Participant** | Emits `BugProductChanged` events when a bug's product or component changes. This triggers flag retargeting in `service-attachment`. |
 
 ## Trigger
 
@@ -134,7 +134,7 @@ The workflow is triggered by a **user action**: an authenticated user sets a fla
 Three compensating triggers can interrupt or modify the workflow after initiation:
 
 1. **Attachment obsolescence** — when `MarkAttachmentObsolete` is issued, all pending `?` flags on that attachment are cascade-canceled.
-2. **Bug product/component move** — when `service-bug` emits `BugMoved`, `service-attachment` retargets or removes flags whose types are no longer applicable.
+2. **Bug product/component move** — when `service-bug` emits `BugProductChanged`, `service-attachment` retargets or removes flags whose types are no longer applicable.
 3. **Admin rule change** — when a flag type's inclusion/exclusion rules are updated, a force-cleanup removes now-invalid flags.
 
 ## Steps
@@ -171,7 +171,7 @@ If validation fails:
 
 **Node**: `create-flag-request` or `create-flag-no-requestee` (serviceTask)
 
-The system creates the flag with status `?`. For attachment-level flags, the command is `attachment.Commands.SetAttachmentFlag`; for bug-level flags, it is `attachment.Commands.SetBugFlag`. Both produce an `attachment.Events.FlagSet` event.
+The system creates the flag with status `?`. For attachment-level flags, the command is `attachment.Commands.SetAttachmentFlag` which emits `attachment.Events.AttachmentFlagRequested`; for bug-level flags, it is `attachment.Commands.SetBugFlag` which emits `attachment.Events.BugFlagRequested`.
 
 The command handler enforces:
 - The flag type is `is_requestable`.
@@ -183,7 +183,7 @@ The command handler enforces:
 
 **Node**: `notify-requestee` (serviceTask)
 
-`service-notification` subscribes to `attachment.Events.FlagSet` and:
+`service-notification` subscribes to `attachment.Events.AttachmentFlagRequested` and `attachment.Events.BugFlagRequested` and:
 
 1. Sends a review-request email to the **requestee** (if specified).
 2. Sends notification to anyone on the flag type's **CC list** (filtered by bug group visibility and private attachment visibility).
@@ -206,7 +206,7 @@ The reviewer issues the appropriate command (`attachment.Commands.SetAttachmentF
 - The setter is in the flag type's `grant_group` (or the grant_group is null, meaning anyone can grant/deny).
 - The flag exists and is currently in `?` status.
 
-On success, the handler emits either `attachment.Events.FlagGranted` or `attachment.Events.FlagDenied`.
+On success, the handler emits one of: `attachment.Events.AttachmentFlagGranted`, `attachment.Events.AttachmentFlagDenied`, `attachment.Events.BugFlagGranted`, or `attachment.Events.BugFlagDenied` (depending on whether the flag is attachment-level or bug-level and whether the decision was grant or deny).
 
 For multiplicable flags, multiple reviewers may each set their own flag instance — the workflow runs independently per flag instance.
 
@@ -252,18 +252,18 @@ sequenceDiagram
     participant Notify as service-notification
 
     Setter->>Attach: attachment.Commands.SetAttachmentFlag(status='?', requestee=userId)
-    Attach-->>Notify: attachment.Events.FlagSet
-    Note over Notify: subscribes to FlagSet
+    Attach-->>Notify: attachment.Events.AttachmentFlagRequested
+    Note over Notify: subscribes to AttachmentFlagRequested + BugFlagRequested
     Notify->>Reviewer: email to requestee + CC list
 
     Reviewer->>Attach: attachment.Commands.SetAttachmentFlag(status='+' or '-')
     alt Granted
-        Attach-->>Notify: attachment.Events.FlagGranted
-        Note over Notify: subscribes to FlagGranted
+        Attach-->>Notify: attachment.Events.AttachmentFlagGranted
+        Note over Notify: subscribes to AttachmentFlagGranted + BugFlagGranted
         Notify->>Setter: email to setter + CC list
     else Denied
-        Attach-->>Notify: attachment.Events.FlagDenied
-        Note over Notify: subscribes to FlagDenied
+        Attach-->>Notify: attachment.Events.AttachmentFlagDenied
+        Note over Notify: subscribes to AttachmentFlagDenied + BugFlagDenied
         Notify->>Setter: email to setter + CC list
     end
 ```
@@ -272,11 +272,14 @@ sequenceDiagram
 
 | Subscriber | Subscribed Event | Action |
 |------------|-----------------|--------|
-| `service-notification` | `attachment.Events.FlagSet` | Email requestee and CC list about new review request |
-| `service-notification` | `attachment.Events.FlagGranted` | Email setter and CC list about granted flag |
-| `service-notification` | `attachment.Events.FlagDenied` | Email setter and CC list about denied flag |
+| `service-notification` | `attachment.Events.AttachmentFlagRequested` | Email requestee and CC list about new attachment-level review request |
+| `service-notification` | `attachment.Events.BugFlagRequested` | Email requestee and CC list about new bug-level review request |
+| `service-notification` | `attachment.Events.AttachmentFlagGranted` | Email setter and CC list about granted attachment-level flag |
+| `service-notification` | `attachment.Events.AttachmentFlagDenied` | Email setter and CC list about denied attachment-level flag |
+| `service-notification` | `attachment.Events.BugFlagGranted` | Email setter and CC list about granted bug-level flag |
+| `service-notification` | `attachment.Events.BugFlagDenied` | Email setter and CC list about denied bug-level flag |
 | `service-notification` | `attachment.Events.AttachmentFlagCleared` | Email setter about canceled/cleared flag |
-| `service-attachment` | `bug.Events.BugMoved` | Retarget or remove flags based on new product/component rules |
+| `service-attachment` | `bug.Events.BugProductChanged` | Retarget or remove flags based on new product/component rules |
 | `service-attachment` | `attachment.Events.FlagTypeInclusionsChanged` | Force cleanup of flags that no longer match inclusion rules |
 | `service-attachment` | `attachment.Events.FlagTypeExclusionsChanged` | Force cleanup of flags that now match exclusion rules |
 
@@ -305,16 +308,16 @@ When an attachment is marked obsolete, the command handler in `service-attachmen
 
 ### Bug Product/Component Move — Flag Retargeting
 
-**Trigger**: `service-bug` emits `bug.Events.BugMoved`.
+**Trigger**: `service-bug` emits `bug.Events.BugProductChanged`.
 
-`service-attachment` subscribes to `BugMoved` events and runs the retargeting logic:
+`service-attachment` subscribes to `BugProductChanged` events and runs the retargeting logic:
 
 1. For each flag on the bug and its attachments, check if the flag type is still applicable in the new product/component (using inclusion/exclusion rules).
 2. If the same flag type name is available in the new product/component, update the flag's `type_id` to the new type → emit `FlagRetargeted`.
 3. If no matching flag type exists, delete the flag → emit `AttachmentFlagCleared` with reason `retarget_failed`.
 4. `service-notification` sends email to the setter for each retargeted or removed flag.
 
-**Consistency**: Retargeting is eventually consistent — it happens in a subscription handler after the `BugMoved` event is published. There is a brief window where flags may reference a flag type that is technically invalid for the new product/component. This is acceptable because:
+**Consistency**: Retargeting is eventually consistent — it happens in a subscription handler after the `BugProductChanged` event is published. There is a brief window where flags may reference a flag type that is technically invalid for the new product/component. This is acceptable because:
 - The bug move is the primary operation; flag retargeting is a compensating action.
 - The window is bounded by the message bus delivery latency (typically milliseconds).
 
@@ -359,13 +362,13 @@ All flag state is owned by `service-attachment` (per ADR-010). The `AttachmentAg
 | Flag state (+, -, ?, X) | `service-attachment` aggregate | **Strong** — within aggregate transaction | Flag creation and status changes are atomic within the aggregate |
 | Flag read models | `service-attachment` projections | **Eventual** — projected from events | `AttachmentFlagReadModel` may lag by milliseconds |
 | Notification delivery | `service-notification` | **Eventual** — async subscription processing | Email is sent after the event is published and processed |
-| Flag retargeting after bug move | `service-attachment` subscription | **Eventual** — triggered by `BugMoved` event | Brief window of potentially invalid flags |
+| Flag retargeting after bug move | `service-attachment` subscription | **Eventual** — triggered by `BugProductChanged` event | Brief window of potentially invalid flags |
 | Flag type applicability | `service-attachment` read model | **Eventual** — projected from inclusion/exclusion events | Admin rule changes propagate asynchronously |
 
 ### Projection Lag Tolerance
 
 - `service-notification` must tolerate projection lag when resolving recipient visibility. The event payload carries sufficient context (product ID, component ID, bug group IDs) for the notification handler to make visibility decisions without querying the latest read model.
-- `service-attachment` retargeting handler should use `waitForProjection` semantics when querying `FlagTypeReadModel` after a `BugMoved` event, to ensure the product/component configuration is current before making retargeting decisions.
+- `service-attachment` retargeting handler should use `waitForProjection` semantics when querying `FlagTypeReadModel` after a `BugProductChanged` event, to ensure the product/component configuration is current before making retargeting decisions.
 - If `waitForProjection` is not available, the handler should retry with exponential backoff (3 attempts, 100ms/500ms/2s) before falling back to conservative behavior (remove the flag and notify the setter).
 
 ### Cross-Service Invariants
@@ -392,7 +395,7 @@ All flag state is owned by `service-attachment` (per ADR-010). The `AttachmentAg
 
 ### FM-2: Flag Retargeting Race Condition
 
-**Scenario**: A reviewer grants a flag (`+`) while `service-attachment` is simultaneously retargeting flags after a `BugMoved` event.
+**Scenario**: A reviewer grants a flag (`+`) while `service-attachment` is simultaneously retargeting flags after a `BugProductChanged` event.
 
 **Recovery**: The aggregate's optimistic concurrency control detects the conflict. The retargeting subscription handler should reload the flag and re-evaluate. If the flag was already granted (`+`), the retargeting should preserve the granted status and only update the `type_id` if the same flag type exists in the new product/component.
 
@@ -422,13 +425,13 @@ All flag state is owned by `service-attachment` (per ADR-010). The `AttachmentAg
 
 **Compensation**: None needed. The aggregate invariant is preserved.
 
-### FM-6: BugMoved Event Delivery Delay
+### FM-6: BugProductChanged Event Delivery Delay
 
-**Scenario**: A bug is moved to a new product, but the `BugMoved` event is delayed on the message bus. During the delay, a user creates a new flag on the bug using the old product's flag types.
+**Scenario**: A bug is moved to a new product, but the `BugProductChanged` event is delayed on the message bus. During the delay, a user creates a new flag on the bug using the old product's flag types.
 
 **Recovery**: The `SetAttachmentFlag` command handler validates against the current product/component (from its read model). If the read model has already been updated by the bug service's projection, the new flag request will be validated against the new product's rules. If the read model is stale (still shows the old product), a flag may be created that is immediately invalid once retargeting runs.
 
-**Compensation**: The retargeting subscription handler will detect and clean up the invalid flag when it eventually processes the `BugMoved` event. The setter is notified that their flag was removed. This is an acceptable edge case — the window is bounded by message bus latency.
+**Compensation**: The retargeting subscription handler will detect and clean up the invalid flag when it eventually processes the `BugProductChanged` event. The setter is notified that their flag was removed. This is an acceptable edge case — the window is bounded by message bus latency.
 
 ### FM-7: Flag Type Deactivated During Pending Review
 

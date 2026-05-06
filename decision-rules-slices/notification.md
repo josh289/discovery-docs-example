@@ -1,5 +1,7 @@
 # Decision Rules — service-notification
 
+> **Resolved (2026-05-06)**: Scheduled reports (the Whine system) are owned exclusively by `service-notification`. The previously parallel search-side rules (`BR-search-005`, `BR-search-010..013`, `BR-search-PERM-{Create,Update,Delete}ScheduledReport`, `BR-search-POLICY-NotUsedByReportPolicy`, `BR-search-POLICY-SavedSearchVisiblePolicy`) have been removed from `audit-output/decision-rules-slices/search.md`. The notification-side rules below (`BR-notification-PERM-{Create,Update,Delete,Get}ScheduledReport`, `BR-notification-POLICY-OwnsSchedulePolicy`, `BR-notification-ST-new-Active`, `BR-notification-ST-Active-Deleted`, `BR-notification-018`) are canonical.
+
 ## Master Table
 
 | Rule ID | Description | Inputs | Outputs | Source citation | Category |
