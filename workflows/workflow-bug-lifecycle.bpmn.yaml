@@ -1,0 +1,468 @@
+id: workflow-bug-lifecycle
+name: Bug Lifecycle — Creation to Resolution
+
+participants:
+  - service: service-user
+    role: participant
+  - service: service-product
+    role: participant
+  - service: service-bug
+    role: initiator
+  - service: service-comment
+    role: participant
+  - service: service-attachment
+    role: participant
+  - service: service-notification
+    role: participant
+
+nodes:
+  # ── TRIGGER ──────────────────────────────────────────────
+  - id: start
+    type: startEvent
+    label: >
+      User submits "File a Bug" form with product, component, version,
+      summary, and optional fields (severity, priority, assignee, CC, etc.)
+
+  # ── BUG CREATION ─────────────────────────────────────────
+  - id: validate-product-access
+    type: serviceTask
+    label: "Validate user can enter product (group_control_map)"
+    command: service-bug.Commands.CreateBug
+    notes: >
+      CanEnterProductPolicy queries locally projected
+      ProductGroupControlsReadModel (fed by product.Events.GroupControlsUpdated).
+      Also resolves product's allowsUnconfirmed flag and component's
+      initial_cc / defaultAssignee / defaultQaContact.
+
+  - id: validate-workflow-status
+    type: serviceTask
+    label: "Resolve initial status from StatusWorkflowConfig"
+    query: service-bug.Queries.GetCreationStatuses
+    notes: >
+      Queries StatusWorkflowReadModel for transitions where old_status IS NULL.
+      If product allows_unconfirmed → UNCONFIRMED; else → NEW.
+
+  - id: create-bug-aggregate
+    type: serviceTask
+    label: "Create BugAggregate (fields, CC, groups, keywords, custom fields)"
+    command: service-bug.Commands.CreateBug
+    event: bug.Events.BugCreated
+    notes: >
+      Fields validated in topological dependency order (VALIDATOR_DEPENDENCIES).
+      Component initial_cc auto-added to CC list. Reporter is immutable.
+      MandatoryFieldPolicy enforces required custom fields.
+
+  # unciteable: gateway-post-creation is a pure parallel fan-out with no conditional branching
+  - id: gateway-post-creation
+    type: exclusiveGateway
+    label: "Post-creation fan-out"
+    cite: "[unciteable: TODO]"
+    citePath: "[unciteable: TODO]"
+
+  # ── CREATION NOTIFICATIONS ───────────────────────────────
+  - id: notify-bug-created
+    type: serviceTask
+    label: "Send 'new bug' email to CC, assignee, QA, reporter"
+    event: bug.Events.BugCreated
+    notes: >
+      service-notification BugCreatedNotificationHandler subscribes to
+      bug.Events.BugCreated. Computes recipients (roles + watchers +
+      global watchers), filters by preferences/visibility, renders per-user
+      email templates (text + HTML), dispatches via SMTP.
+
+  # ── CREATION SIDE-EFFECTS ────────────────────────────────
+  - id: index-bug-created
+    type: serviceTask
+    label: "Index new bug in search engine"
+    event: bug.Events.BugCreated
+    notes: >
+      service-search subscribes to BugCreated for fulltext index insertion.
+
+  - id: seed-comment-scope
+    type: serviceTask
+    label: "Initialize comment scope for new bug"
+    event: bug.Events.BugCreated
+    notes: >
+      service-comment subscribes to BugCreated to prepare comment thread scope.
+
+  - id: seed-attachment-scope
+    type: serviceTask
+    label: "Initialize attachment scope for new bug"
+    event: bug.Events.BugCreated
+    notes: >
+      service-attachment subscribes to BugCreated for flag type resolution.
+
+  # ── LIFECYCLE: USER ADDS COMMENT ─────────────────────────
+  - id: comment-added-start
+    type: startEvent
+    label: "User adds a comment to a bug"
+
+  - id: create-comment
+    type: serviceTask
+    label: "Create CommentAggregate (body, privacy, tags, work_time)"
+    command: service-comment.Commands.CreateComment
+    event: comment.Events.CommentCreated
+    notes: >
+      CanCommentOnBugPolicy validates product-edit permission.
+      IsInsiderPolicy required for isPrivate=true. Body max 65535 chars.
+      work_time carried as payload for service-bug time-tracking projection.
+
+  - id: notify-comment-created
+    type: serviceTask
+    label: "Send 'new comment' email to bug stakeholders"
+    event: comment.Events.CommentCreated
+    notes: >
+      service-notification CommentNotificationHandler subscribes to
+      comment.Events.CommentCreated. Full bug context in event payload
+      (ADR-012). Filters by preferences/visibility/insider status.
+
+  - id: project-comment-work-time
+    type: serviceTask
+    label: "Project work_time into bug time-tracking read model"
+    event: comment.Events.CommentCreated
+    notes: >
+      service-bug subscribes to CommentCreated to update
+      BugTimeTrackingReadModel (actualTime += workTime).
+
+  # ── LIFECYCLE: USER ADDS ATTACHMENT ──────────────────────
+  - id: attachment-added-start
+    type: startEvent
+    label: "User uploads an attachment to a bug"
+
+  - id: create-attachment
+    type: serviceTask
+    label: "Create AttachmentAggregate (binary → object storage, metadata, flags)"
+    command: service-attachment.Commands.CreateAttachment
+    event: attachment.Events.AttachmentCreated
+    notes: >
+      Validates bug visibility + product-edit permission (cross-service
+      GetBug query). Sanitizes filename, validates MIME type, checks file
+      size limits. Binary data stored in S3/MinIO (ADR-005).
+      Aggregate holds metadata + storageKey only.
+
+  - id: notify-attachment-created
+    type: serviceTask
+    label: "Send 'new attachment' email to bug stakeholders"
+    event: attachment.Events.AttachmentCreated
+    notes: >
+      service-notification AttachmentNotificationHandler subscribes to
+      attachment.Events.AttachmentCreated.
+
+  - id: create-attachment-system-comment
+    type: serviceTask
+    label: "Create system comment (type ATTACHMENT_CREATED)"
+    event: attachment.Events.AttachmentCreated
+    notes: >
+      service-comment AttachmentCreatedSubscriptionHandler subscribes to
+      attachment.Events.AttachmentCreated. Creates CommentAggregate with
+      type=ATTACHMENT_CREATED, extraData=attachmentId.
+
+  # ── LIFECYCLE: FIELD UPDATE ──────────────────────────────
+  - id: update-bug-start
+    type: startEvent
+    label: "User updates bug fields (assignee, priority, severity, CC, etc.)"
+
+  - id: update-bug
+    type: serviceTask
+    label: "Apply field changes with validator dependency ordering"
+    command: service-bug.Commands.UpdateBug
+    event: bug.Events.BugUpdated
+    notes: >
+      CanEditBugPolicy + CanChangeFieldPolicy enforce field-level permissions.
+      Optimistic concurrency (expected version check) prevents silent
+      overwrites. Emits BugUpdated with full changes map (ADR-012).
+      Specialized events also emitted: BugAssigned, BugCcChanged,
+      BugCustomFieldChanged, etc.
+
+  - id: notify-bug-updated
+    type: serviceTask
+    label: "Send changed-field notification email"
+    event: bug.Events.BugUpdated
+    notes: >
+      service-notification BugUpdatedNotificationHandler subscribes to
+      BugUpdated. Event payload includes changes map with old/new values,
+      bug snapshot, and forced recipients (e.g., removed CC users).
+
+  # ── LIFECYCLE: STATUS TRANSITION ─────────────────────────
+  - id: status-transition-start
+    type: startEvent
+    label: "User changes bug status (confirm, assign, resolve, verify, close, reopen)"
+
+  - id: validate-transition
+    type: serviceTask
+    label: "Validate status transition against StatusWorkflowConfig"
+    query: service-bug.Queries.GetValidStatusTransitions
+    notes: >
+      ValidStatusTransitionPolicy checks the directed graph in
+      StatusWorkflowReadModel. require_comment enforced if configured.
+      Product-level allows_unconfirmed flag consulted for UNCONFIRMED→NEW.
+
+  - id: gateway-transition-type
+    type: exclusiveGateway
+    label: "Transition type?"
+    cites:
+      - id: BR-workflow-bug-lifecycle-GW-is-resolving-gateway
+        citePath: "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md#state-machines"
+      - id: BR-bug-008
+        citePath: "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md#business-rule-8"
+      - id: BR-bug-POLICY-NoOpenBlockersPolicy
+        citePath: "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md#authorization-layer-2"
+
+  - id: check-open-blockers
+    type: serviceTask
+    label: "NoOpenBlockersPolicy: query dependency read model"
+    condition: "resolution == FIXED"
+    notes: >
+      Queries BugDependencyReadModel WHERE dependentBugId = ? AND
+      isBlockerOpen = true. If any open blockers exist, transition is
+      rejected with still_unresolved_bugs error. Eventual consistency
+      accepted (Q9).
+
+  - id: apply-status-transition
+    type: serviceTask
+    label: "Apply transition: update status, resolution, everConfirmed"
+    command: service-bug.Commands.TransitionBugStatus
+    event: bug.Events.BugStatusTransitioned
+    notes: >
+      Updates aggregate status and resolution. Sets everConfirmed = true
+      if leaving UNCONFIRMED. Emits BugStatusTransitioned plus
+      BugResolved / BugReopened / BugClosed as appropriate.
+
+  - id: gateway-post-transition
+    type: exclusiveGateway
+    label: "Post-transition fan-out"
+    cites:
+      - id: BR-workflow-bug-lifecycle-GW-is-closed-gateway
+        citePath: "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md#state-machines"
+      - id: BR-bug-004
+        citePath: "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md#business-rule-4"
+      - id: BR-bug-012
+        citePath: "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md#business-rule-12"
+
+  - id: notify-status-changed
+    type: serviceTask
+    label: "Send status/resolution change email"
+    event: bug.Events.BugStatusTransitioned
+    notes: >
+      service-notification BugStatusChangedNotificationHandler subscribes to
+      BugStatusTransitioned. For resolve events, also sends dependency-cascade
+      (dep_only) notifications to stakeholders of dependent bugs.
+
+  - id: notify-resolved
+    type: serviceTask
+    label: "Send resolution notification + dependency cascade"
+    event: bug.Events.BugResolved
+    condition: "transition resulted in closed status"
+    notes: >
+      BugResolvedNotificationHandler sends resolution email. Also triggers
+      dep_only notifications: for each dependent bug, a secondary email is
+      sent to its stakeholders informing them that a blocker was resolved.
+      Event payload includes affectedDependentBugIds and
+      dependentBugSnapshots (ADR-012).
+
+  - id: index-status-change
+    type: serviceTask
+    label: "Update search index with new status/resolution"
+    event: bug.Events.BugStatusTransitioned
+    notes: >
+      service-search subscribes to all status events for index update.
+
+  # ── LIFECYCLE: MARK DUPLICATE ────────────────────────────
+  - id: mark-duplicate-start
+    type: startEvent
+    label: "User marks bug as duplicate of another bug"
+
+  - id: mark-duplicate
+    type: serviceTask
+    label: "Set duplicateOf, transition status, set resolution DUPLICATE"
+    command: service-bug.Commands.MarkBugDuplicate
+    event: bug.Events.BugMarkedDuplicate
+    notes: >
+      CanMarkDuplicatePolicy validates target bug visibility and transition
+      legality. Sets duplicateOf, transitions to duplicateOrMoveBugStatus,
+      sets resolution DUPLICATE. Auto-CCs target bug's reporter.
+
+  - id: create-duplicate-system-comments
+    type: serviceTask
+    label: "Create DUPE_OF and HAS_DUPE system comments"
+    event: bug.Events.BugMarkedDuplicate
+    notes: >
+      service-comment BugDuplicateSubscriptionHandler creates two system
+      comments: DUPE_OF on the duplicate bug, HAS_DUPE on the original.
+
+  - id: notify-duplicate
+    type: serviceTask
+    label: "Send duplicate notification email"
+    event: bug.Events.BugMarkedDuplicate
+    notes: >
+      service-notification BugMarkedDuplicateNotificationHandler.
+
+  # ── LIFECYCLE: DEPENDENCY MANAGEMENT ─────────────────────
+  - id: dependency-add-start
+    type: startEvent
+    label: "User adds a dependency (depends_on / blocks)"
+
+  - id: add-dependency
+    type: serviceTask
+    label: "Add dependency with loop/cycle detection"
+    command: service-bug.Commands.AddBugDependency
+    event: bug.Events.BugDependencyAdded
+    notes: >
+      DependencyLoopPolicy: no self-reference, no circular dependencies
+      (traverses full tree from BugDependencyReadModel). CanSeeBugPolicy
+      on the referenced bug. Single command targets one aggregate;
+      reverse "blocks" relationship projected into read model (ADR-008).
+
+  - id: notify-dependency-added
+    type: serviceTask
+    label: "Send dependency notification"
+    event: bug.Events.BugDependencyAdded
+    notes: >
+      service-notification DependencyNotificationHandler notifies
+      stakeholders of the dependent bug.
+
+  # ── END EVENTS ───────────────────────────────────────────
+  - id: end-created
+    type: endEvent
+    label: "Bug created; lifecycle proceeds through status transitions"
+
+  - id: end-comment-added
+    type: endEvent
+    label: "Comment recorded and stakeholders notified"
+
+  - id: end-attachment-added
+    type: endEvent
+    label: "Attachment stored, stakeholders notified, system comment created"
+
+  - id: end-bug-updated
+    type: endEvent
+    label: "Bug fields updated and stakeholders notified"
+
+  - id: end-status-transitioned
+    type: endEvent
+    label: "Status changed; stakeholders and dependents notified"
+
+  - id: end-duplicate-marked
+    type: endEvent
+    label: "Bug marked duplicate; system comments and notifications sent"
+
+  - id: end-dependency-added
+    type: endEvent
+    label: "Dependency added; stakeholders notified"
+
+edges:
+  # ── CREATION FLOW ────────────────────────────────────────
+  - from: start
+    to: validate-product-access
+  - from: validate-product-access
+    to: validate-workflow-status
+  - from: validate-workflow-status
+    to: create-bug-aggregate
+  - from: create-bug-aggregate
+    to: gateway-post-creation
+
+  - from: gateway-post-creation
+    to: notify-bug-created
+  - from: gateway-post-creation
+    to: index-bug-created
+  - from: gateway-post-creation
+    to: seed-comment-scope
+  - from: gateway-post-creation
+    to: seed-attachment-scope
+
+  - from: notify-bug-created
+    to: end-created
+  - from: index-bug-created
+    to: end-created
+  - from: seed-comment-scope
+    to: end-created
+  - from: seed-attachment-scope
+    to: end-created
+
+  # ── COMMENT FLOW ─────────────────────────────────────────
+  - from: comment-added-start
+    to: create-comment
+  - from: create-comment
+    to: notify-comment-created
+  - from: create-comment
+    to: project-comment-work-time
+  - from: notify-comment-created
+    to: end-comment-added
+  - from: project-comment-work-time
+    to: end-comment-added
+
+  # ── ATTACHMENT FLOW ──────────────────────────────────────
+  - from: attachment-added-start
+    to: create-attachment
+  - from: create-attachment
+    to: notify-attachment-created
+  - from: create-attachment
+    to: create-attachment-system-comment
+  - from: notify-attachment-created
+    to: end-attachment-added
+  - from: create-attachment-system-comment
+    to: end-attachment-added
+
+  # ── FIELD UPDATE FLOW ────────────────────────────────────
+  - from: update-bug-start
+    to: update-bug
+  - from: update-bug
+    to: notify-bug-updated
+  - from: notify-bug-updated
+    to: end-bug-updated
+
+  # ── STATUS TRANSITION FLOW ───────────────────────────────
+  - from: status-transition-start
+    to: validate-transition
+  - from: validate-transition
+    to: gateway-transition-type
+
+  - from: gateway-transition-type
+    to: check-open-blockers
+    condition: "resolution == FIXED"
+
+  - from: gateway-transition-type
+    to: apply-status-transition
+    condition: "resolution != FIXED (no blocker check needed)"
+
+  - from: check-open-blockers
+    to: apply-status-transition
+    condition: "no open blockers found"
+
+  - from: apply-status-transition
+    to: gateway-post-transition
+
+  - from: gateway-post-transition
+    to: notify-status-changed
+  - from: gateway-post-transition
+    to: notify-resolved
+    condition: "new status is closed (RESOLVED/VERIFIED/CLOSED)"
+  - from: gateway-post-transition
+    to: index-status-change
+
+  - from: notify-status-changed
+    to: end-status-transitioned
+  - from: notify-resolved
+    to: end-status-transitioned
+  - from: index-status-change
+    to: end-status-transitioned
+
+  # ── DUPLICATE FLOW ───────────────────────────────────────
+  - from: mark-duplicate-start
+    to: mark-duplicate
+  - from: mark-duplicate
+    to: create-duplicate-system-comments
+  - from: mark-duplicate
+    to: notify-duplicate
+  - from: create-duplicate-system-comments
+    to: end-duplicate-marked
+  - from: notify-duplicate
+    to: end-duplicate-marked
+
+  # ── DEPENDENCY FLOW ──────────────────────────────────────
+  - from: dependency-add-start
+    to: add-dependency
+  - from: add-dependency
+    to: notify-dependency-added
+  - from: notify-dependency-added
+    to: end-dependency-added

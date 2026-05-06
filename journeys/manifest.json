@@ -1,0 +1,170 @@
+{
+  "phase": "architecture",
+  "projectName": "bugzilla-evergreen",
+  "narrative": "This manifest plans the W4 journeys-linked audit for bugzilla-evergreen, a Bugzilla clone rebuilt as Banyan CQRS/Event Sourcing microservices. Seven user journeys are in scope (administer-products-components, bug-detail-review, bug-lifecycle-management, dashboard-personal-workflow, file-a-bug, manage-attachments-flags, search-and-filter-bugs), mapped against three cited workflows (workflow-bug-lifecycle, workflow-flag-review-approval, workflow-product-creation-saga) and eight SERVICE_SPEC.md files (service-attachment, service-bug, service-comment, service-notification, service-product, service-search, service-user). The canonical rule registry (audit-output/decision-rules.md) is not yet present on disk; slicers MUST mark all rule citations as [unciteable: TODO] until it appears. Every slicer must insert a 'Workflow & Rules Mapping' section (step-by-step mapping of journey steps to workflow gateways) and a 'Workflow & Rules Cross-References' section (structured table of workflow node → Rule ID → spec section). If a journey step cannot be mapped to any workflow gateway, the slicer marks it '[no clear mapping — manual review needed]'.",
+  "slices": [
+    {
+      "id": "administer-products-components",
+      "title": "Re-emit journey administer-products-components with workflow + rule cross-refs",
+      "focus": "Map product/component CRUD steps to workflow-product-creation-saga gateways (create, update, deactivation). Cite service-product Business Rules for validation and service-bug for product-in-use integrity checks. Also cite service-user for admin-permission rules.",
+      "paths": [
+        "output/frontend/journeys/administer-products-components.md",
+        "audit-output/workflows/workflow-product-creation-saga.bpmn.yaml",
+        "output/phase-5-specification/specs/service-product/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-user/SERVICE_SPEC.md"
+      ],
+      "expectedSections": [
+        "Workflow & Rules Mapping",
+        "Workflow & Rules Cross-References"
+      ],
+      "sliceType": "journey",
+      "relatedWorkflows": ["workflow-product-creation-saga.bpmn.yaml"],
+      "relatedSpecs": [
+        "service-product/SERVICE_SPEC.md",
+        "service-bug/SERVICE_SPEC.md",
+        "service-user/SERVICE_SPEC.md"
+      ]
+    },
+    {
+      "id": "bug-detail-review",
+      "title": "Re-emit journey bug-detail-review with workflow + rule cross-refs",
+      "focus": "This read-heavy journey views bug details, comments, attachments, and history. Map comment-add and status-change steps to workflow-bug-lifecycle gateways. Cite service-bug (field visibility, read-model projection rules), service-comment (comment CRUD rules), and service-attachment (attachment display rules).",
+      "paths": [
+        "output/frontend/journeys/bug-detail-review.md",
+        "audit-output/workflows/workflow-bug-lifecycle.bpmn.yaml",
+        "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-comment/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-attachment/SERVICE_SPEC.md"
+      ],
+      "expectedSections": [
+        "Workflow & Rules Mapping",
+        "Workflow & Rules Cross-References"
+      ],
+      "sliceType": "journey",
+      "relatedWorkflows": ["workflow-bug-lifecycle.bpmn.yaml"],
+      "relatedSpecs": [
+        "service-bug/SERVICE_SPEC.md",
+        "service-comment/SERVICE_SPEC.md",
+        "service-attachment/SERVICE_SPEC.md"
+      ]
+    },
+    {
+      "id": "bug-lifecycle-management",
+      "title": "Re-emit journey bug-lifecycle-management with workflow + rule cross-refs",
+      "focus": "Primary lifecycle journey — every status transition (NEW → ASSIGNED → RESOLVED → VERIFIED → CLOSED) should map directly to workflow-bug-lifecycle gateways. Cite service-bug Business Rules for status transitions, resolution policies, and visibility. Cite service-comment for mandatory-comment rules on certain transitions, and service-notification for notification triggers.",
+      "paths": [
+        "output/frontend/journeys/bug-lifecycle-management.md",
+        "audit-output/workflows/workflow-bug-lifecycle.bpmn.yaml",
+        "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-comment/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md"
+      ],
+      "expectedSections": [
+        "Workflow & Rules Mapping",
+        "Workflow & Rules Cross-References"
+      ],
+      "sliceType": "journey",
+      "relatedWorkflows": ["workflow-bug-lifecycle.bpmn.yaml"],
+      "relatedSpecs": [
+        "service-bug/SERVICE_SPEC.md",
+        "service-comment/SERVICE_SPEC.md",
+        "service-notification/SERVICE_SPEC.md"
+      ]
+    },
+    {
+      "id": "dashboard-personal-workflow",
+      "title": "Re-emit journey dashboard-personal-workflow with workflow + rule cross-refs",
+      "focus": "Read-side dashboard journey — most steps (saved searches, my bugs, recent activity) are query-based and may not map to workflow gateways. Cite service-bug for bug-list projection rules, service-search for saved-search rules, and service-comment for recent-activity display. Slicer should mark un-mappable steps as '[no clear mapping — manual review needed]'.",
+      "paths": [
+        "output/frontend/journeys/dashboard-personal-workflow.md",
+        "audit-output/workflows/workflow-bug-lifecycle.bpmn.yaml",
+        "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-search/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-comment/SERVICE_SPEC.md"
+      ],
+      "expectedSections": [
+        "Workflow & Rules Mapping",
+        "Workflow & Rules Cross-References"
+      ],
+      "sliceType": "journey",
+      "relatedWorkflows": ["workflow-bug-lifecycle.bpmn.yaml"],
+      "relatedSpecs": [
+        "service-bug/SERVICE_SPEC.md",
+        "service-search/SERVICE_SPEC.md",
+        "service-comment/SERVICE_SPEC.md"
+      ]
+    },
+    {
+      "id": "file-a-bug",
+      "title": "Re-emit journey file-a-bug with workflow + rule cross-refs",
+      "focus": "Map every step (Classification, Details, People & Tags, Review & Submit) to workflow-bug-lifecycle gateways (bug creation → initial status assignment → notification). Cite service-bug Business Rules for validation, field defaults, and permission checks. Also cite service-product for product/component validation and service-user for assignee/searchable-user rules.",
+      "paths": [
+        "output/frontend/journeys/file-a-bug.md",
+        "audit-output/workflows/workflow-bug-lifecycle.bpmn.yaml",
+        "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-product/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-user/SERVICE_SPEC.md"
+      ],
+      "expectedSections": [
+        "Workflow & Rules Mapping",
+        "Workflow & Rules Cross-References"
+      ],
+      "sliceType": "journey",
+      "relatedWorkflows": ["workflow-bug-lifecycle.bpmn.yaml"],
+      "relatedSpecs": [
+        "service-bug/SERVICE_SPEC.md",
+        "service-product/SERVICE_SPEC.md",
+        "service-user/SERVICE_SPEC.md"
+      ]
+    },
+    {
+      "id": "manage-attachments-flags",
+      "title": "Re-emit journey manage-attachments-flags with workflow + rule cross-refs",
+      "focus": "Two workflows touch this journey: workflow-flag-review-approval (flag set/clear/review gateways) and workflow-bug-lifecycle (attachment branch). Cite service-attachment for upload/delete/display rules, service-bug for bug-context integrity, and service-comment for attachment-linked comment rules.",
+      "paths": [
+        "output/frontend/journeys/manage-attachments-flags.md",
+        "audit-output/workflows/workflow-flag-review-approval.bpmn.yaml",
+        "audit-output/workflows/workflow-bug-lifecycle.bpmn.yaml",
+        "output/phase-5-specification/specs/service-attachment/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-comment/SERVICE_SPEC.md"
+      ],
+      "expectedSections": [
+        "Workflow & Rules Mapping",
+        "Workflow & Rules Cross-References"
+      ],
+      "sliceType": "journey",
+      "relatedWorkflows": [
+        "workflow-flag-review-approval.bpmn.yaml",
+        "workflow-bug-lifecycle.bpmn.yaml"
+      ],
+      "relatedSpecs": [
+        "service-attachment/SERVICE_SPEC.md",
+        "service-bug/SERVICE_SPEC.md",
+        "service-comment/SERVICE_SPEC.md"
+      ]
+    },
+    {
+      "id": "search-and-filter-bugs",
+      "title": "Re-emit journey search-and-filter-bugs with workflow + rule cross-refs",
+      "focus": "Read-side journey — most steps (query construction, result display, saved searches) will not map to workflow gateways. Cite service-search query rules (full-text, field-based, saved-search CRUD) and service-bug field-visibility/permission rules. Slicer should mark un-mappable steps as '[no clear mapping — manual review needed]'. Include workflow-bug-lifecycle for any status-filter steps.",
+      "paths": [
+        "output/frontend/journeys/search-and-filter-bugs.md",
+        "audit-output/workflows/workflow-bug-lifecycle.bpmn.yaml",
+        "output/phase-5-specification/specs/service-search/SERVICE_SPEC.md",
+        "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md"
+      ],
+      "expectedSections": [
+        "Workflow & Rules Mapping",
+        "Workflow & Rules Cross-References"
+      ],
+      "sliceType": "journey",
+      "relatedWorkflows": ["workflow-bug-lifecycle.bpmn.yaml"],
+      "relatedSpecs": [
+        "service-search/SERVICE_SPEC.md",
+        "service-bug/SERVICE_SPEC.md"
+      ]
+    }
+  ]
+}

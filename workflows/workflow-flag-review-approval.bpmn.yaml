@@ -1,0 +1,314 @@
+id: workflow-flag-review-approval
+name: Flag Review & Approval Workflow
+participants:
+  - service: service-attachment
+    role: initiator
+  - service: service-notification
+    role: participant
+  - service: service-bug
+    role: participant
+
+nodes:
+  # ── Main Happy Path ──────────────────────────────────────────────
+  - id: start
+    type: startEvent
+    label: >
+      User requests flag review — sets status '?' on a bug or attachment,
+      optionally specifying a requestee. Applies to both attachment-level
+      flags (attach_id set) and bug-level flags (attach_id IS NULL).
+
+  - id: validate-flag-type-applicability
+    type: serviceTask
+    label: Resolve available flag types via inclusion/exclusion rules
+    command: attachment.Queries.GetAvailableFlagTypes
+    notes: >
+      Queries flaginclusions/flagexclusions for the target's
+      product/component. A flag type is applicable only if it has a matching
+      inclusion row with no matching exclusion row.
+
+  - id: gateway-applicable
+    type: exclusiveGateway
+    label: Flag type applicable to target product/component?
+    cites:
+      - id: BR-attachment-010
+        citePath: "audit-output/decision-rules.md#br-attachment-010"
+      - id: BR-attachment-POLICY-FlagTypeApplicabilityPolicy
+        citePath: "output/phase-5-specification/specs/service-attachment/SERVICE_SPEC.md#authorization-layer-2"
+      - id: BR-attachment-011
+        citePath: "audit-output/decision-rules.md#br-attachment-011"
+
+  - id: validate-requestee
+    type: serviceTask
+    label: Validate requestee (visibility, permissions, account status)
+    notes: >
+      Checks: requestee account is enabled, requestee can see the bug
+      (group restrictions), requestee can see the attachment (if private,
+      must be insider), requestee has permission to grant the flag type
+      (can_set_flag / grant_group).
+
+  - id: gateway-requestee-valid
+    type: exclusiveGateway
+    label: Requestee valid?
+    cites:
+      - id: BR-attachment-016
+        citePath: "audit-output/decision-rules.md#br-attachment-016"
+      - id: BR-attachment-POLICY-RequesteeVisibilityPolicy
+        citePath: "output/phase-5-specification/specs/service-attachment/SERVICE_SPEC.md#authorization-layer-2"
+
+  - id: create-flag-request
+    type: serviceTask
+    label: Create flag with status '?' (with requestee)
+    command: attachment.Commands.SetAttachmentFlag
+    event: attachment.Events.FlagSet
+
+  - id: create-flag-no-requestee
+    type: serviceTask
+    label: Create flag with status '?' (requestee dropped — skip_requestee_on_error)
+    command: attachment.Commands.SetAttachmentFlag
+    event: attachment.Events.FlagSet
+
+  - id: notify-requestee
+    type: serviceTask
+    label: Send review-request email to requestee (and CC list)
+    event: attachment.Events.FlagSet
+    notes: >
+      service-notification subscribes to FlagSet events. Email is sent to:
+      the requestee (new review request), anyone on the flag type's cc_list
+      (filtered by bug group visibility and private attachment visibility).
+      If requestee has requestee_cc preference enabled, they are auto-added
+      to the bug's CC list.
+
+  - id: wait-for-review-decision
+    type: userTask
+    label: Requestee reviews and decides — grant (+) or deny (-)
+
+  - id: gateway-decision
+    type: exclusiveGateway
+    label: Review decision?
+    cites:
+      - id: BR-attachment-ST-FlagRequested-Granted
+        citePath: "audit-output/decision-rules.md#br-attachment-st-flagrequested-granted"
+      - id: BR-attachment-ST-FlagRequested-Denied
+        citePath: "audit-output/decision-rules.md#br-attachment-st-flagrequested-denied"
+      - id: BR-attachment-POLICY-CanSetFlagPolicy
+        citePath: "output/phase-5-specification/specs/service-attachment/SERVICE_SPEC.md#authorization-layer-2"
+      - id: BR-attachment-015
+        citePath: "audit-output/decision-rules.md#br-attachment-015"
+
+  - id: grant-flag
+    type: serviceTask
+    label: Grant flag — set status '+'
+    command: attachment.Commands.SetAttachmentFlag
+    event: attachment.Events.FlagGranted
+    notes: >
+      Validates setter is in the flag type's grant_group (or grant_group is
+      null = anyone can grant). For bug-level flags, the command is
+      attachment.Commands.SetBugFlag.
+
+  - id: deny-flag
+    type: serviceTask
+    label: Deny flag — set status '-'
+    command: attachment.Commands.SetAttachmentFlag
+    event: attachment.Events.FlagDenied
+    notes: >
+      Same authorization check as grant. For bug-level flags, the command
+      is attachment.Commands.SetBugFlag.
+
+  - id: notify-setter-granted
+    type: serviceTask
+    label: Notify setter that flag was granted
+    event: attachment.Events.FlagGranted
+    notes: >
+      service-notification subscribes to FlagGranted events. Email is sent
+      to: the original setter (their ? request was fulfilled), anyone on
+      the flag type's cc_list (filtered by visibility).
+
+  - id: notify-setter-denied
+    type: serviceTask
+    label: Notify setter that flag was denied
+    event: attachment.Events.FlagDenied
+    notes: >
+      service-notification subscribes to FlagDenied events. Same recipient
+      resolution as notify-setter-granted.
+
+  - id: end-granted
+    type: endEvent
+    label: Flag granted — review/approval complete
+
+  - id: end-denied
+    type: endEvent
+    label: Flag denied — review/approval complete
+
+  - id: end-not-applicable
+    type: endEvent
+    label: Flag type not applicable to target (inclusion/exclusion mismatch)
+
+  - id: end-requestee-invalid
+    type: endEvent
+    label: Requestee cannot review (visibility or permission failure)
+
+  # ── Compensation Flow A: Attachment Obsoleted ─────────────────────
+  - id: start-obsolete
+    type: startEvent
+    label: Attachment marked as obsolete (isobsolete = true)
+
+  - id: cancel-pending-flags-obsolete
+    type: serviceTask
+    label: Cancel all pending '?' flags on the obsoleted attachment
+    command: attachment.Commands.MarkAttachmentObsolete
+    event: attachment.Events.AttachmentFlagCleared
+    notes: >
+      The MarkAttachmentObsolete command handler cascades: iterates all
+      flags with status '?' on the attachment and clears each one. Emits
+      one AttachmentFlagCleared event per canceled flag. The setter of
+      each canceled flag is notified via service-notification.
+
+  - id: end-obsolete-cascade
+    type: endEvent
+    label: All pending flags canceled — attachment obsolete cascade complete
+
+  # ── Compensation Flow B: Bug Moved Between Products ───────────────
+  - id: start-bug-moved
+    type: startEvent
+    label: Bug moved to a different product or component
+    notes: >
+      Triggered by service-bug emitting bug.Events.BugMoved.
+
+  - id: retarget-flags
+    type: serviceTask
+    label: Retarget flags to new product/component inclusion/exclusion rules
+    notes: >
+      service-attachment subscribes to bug.Events.BugMoved. For each flag
+      on the bug (and its attachments), attempts to find an active flag
+      type with the same name in the new product/component. If found,
+      updates the flag's type_id. If not found, the flag is deleted with
+      a notification to the setter.
+    event: attachment.Events.FlagRetargeted
+
+  - id: gateway-retarget-result
+    type: exclusiveGateway
+    label: Retargeting result?
+    cites:
+      - id: BR-attachment-018
+        citePath: "audit-output/decision-rules.md#br-attachment-018"
+      - id: BR-attachment-010
+        citePath: "audit-output/decision-rules.md#br-attachment-010"
+
+  - id: end-retargeted
+    type: endEvent
+    label: Flags retargeted to new product/component rules
+
+  - id: end-retarget-removed
+    type: endEvent
+    label: Flags removed — no matching flag type in new product/component
+
+  # ── Compensation Flow C: Flag Type Inclusion/Exclusion Rules Changed
+  - id: start-rules-changed
+    type: startEvent
+    label: Flag type inclusion/exclusion rules updated by admin
+
+  - id: force-cleanup-flags
+    type: serviceTask
+    label: Force cleanup — remove flags that are no longer valid
+    notes: >
+      Triggered when a flag type's inclusion/exclusion rules are changed
+      (e.g., a flag type is removed from a product). The system identifies
+      all flags of that type whose target no longer matches the updated
+      rules and clears them with notification.
+    event: attachment.Events.AttachmentFlagCleared
+
+  - id: end-rules-cleanup
+    type: endEvent
+    label: Invalid flags cleaned up after rule change
+
+edges:
+  # ── Main Happy Path ──────────────────────────────────────────────
+  - from: start
+    to: validate-flag-type-applicability
+
+  - from: validate-flag-type-applicability
+    to: gateway-applicable
+
+  - from: gateway-applicable
+    to: validate-requestee
+    condition: "flag type applicable — inclusion match, no exclusion match"
+
+  - from: gateway-applicable
+    to: end-not-applicable
+    condition: "flag type not applicable to target product/component"
+
+  - from: validate-requestee
+    to: gateway-requestee-valid
+
+  - from: gateway-requestee-valid
+    to: create-flag-request
+    condition: "requestee valid — can see bug, can see attachment, has grant permission, account enabled"
+
+  - from: gateway-requestee-valid
+    to: create-flag-no-requestee
+    condition: "requestee invalid but skip_requestee_on_error is set"
+
+  - from: gateway-requestee-valid
+    to: end-requestee-invalid
+    condition: "requestee invalid — cannot see bug/attachment or lacks permission"
+
+  - from: create-flag-request
+    to: notify-requestee
+
+  - from: create-flag-no-requestee
+    to: notify-requestee
+
+  - from: notify-requestee
+    to: wait-for-review-decision
+
+  - from: wait-for-review-decision
+    to: gateway-decision
+
+  - from: gateway-decision
+    to: grant-flag
+    condition: "requestee grants review (status +)"
+
+  - from: gateway-decision
+    to: deny-flag
+    condition: "requestee denies review (status -)"
+
+  - from: grant-flag
+    to: notify-setter-granted
+
+  - from: deny-flag
+    to: notify-setter-denied
+
+  - from: notify-setter-granted
+    to: end-granted
+
+  - from: notify-setter-denied
+    to: end-denied
+
+  # ── Compensation Flow A: Attachment Obsoleted ─────────────────────
+  - from: start-obsolete
+    to: cancel-pending-flags-obsolete
+
+  - from: cancel-pending-flags-obsolete
+    to: end-obsolete-cascade
+
+  # ── Compensation Flow B: Bug Moved Between Products ───────────────
+  - from: start-bug-moved
+    to: retarget-flags
+
+  - from: retarget-flags
+    to: gateway-retarget-result
+
+  - from: gateway-retarget-result
+    to: end-retargeted
+    condition: "matching flag type found in new product/component"
+
+  - from: gateway-retarget-result
+    to: end-retarget-removed
+    condition: "no matching flag type — flags deleted with notification"
+
+  # ── Compensation Flow C: Rules Changed ────────────────────────────
+  - from: start-rules-changed
+    to: force-cleanup-flags
+
+  - from: force-cleanup-flags
+    to: end-rules-cleanup

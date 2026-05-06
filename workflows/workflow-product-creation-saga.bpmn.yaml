@@ -1,0 +1,224 @@
+# Product Creation Saga — BPMN Workflow Definition
+#
+# Models the multi-step product creation workflow (exploration R6):
+#   CreateProduct → auto-create first version → auto-create default milestone
+#   → [optional] create bug group in service-user
+#   → [optional] create group_control_map entries in service-product
+#   → [optional] create charting series in service-search
+#   → finalization (cache clear, hooks)
+#
+# If any mandatory step fails, compensation deactivates the product and
+# cleans up created resources.
+#
+# ADR-013: ID-based version/milestone references — no string propagation
+# needed to service-bug on rename events.
+#
+# Proposed commands/events not in current exploration docs:
+#   - product.Events.VersionCreated  (implied by CreateVersion command)
+#   - product.Events.MilestoneCreated (implied by CreateMilestone command)
+#   - user.Commands.CreateGroup       (implied by group model in service-user)
+#   - user.Events.GroupCreated        (implied)
+#   - search.Commands.CreateChartingSeries  (from Bugzilla _create_series())
+#   - search.Events.ChartingSeriesCreated   (implied)
+#   - product.Commands.DeleteVersion        (compensation use; not in exploration)
+#   - product.Commands.DeleteMilestone      (compensation use; not in exploration)
+
+id: workflow-product-creation-saga
+name: Product Creation Saga
+
+participants:
+  - service: service-product
+    role: initiator
+  - service: service-user
+    role: participant
+  - service: service-search
+    role: participant
+
+nodes:
+  # ── Start ──────────────────────────────────────────────────────────
+  - id: start
+    type: startEvent
+    label: Admin submits CreateProduct command via API gateway
+
+  # ── Mandatory: Create Product ──────────────────────────────────────
+  - id: create-product
+    type: serviceTask
+    label: Create Product aggregate (name, description, classificationId, allowsUnconfirmed, defaultMilestone)
+    command: product.Commands.CreateProduct
+    event: product.Events.ProductCreated
+
+  - id: check-product
+    type: exclusiveGateway
+    label: Product aggregate created successfully?
+    cites:
+      - id: BR-product-001
+        citePath: "audit-output/decision-rules.md#br-product-001"
+      - id: BR-product-ST-new-Active
+        citePath: "audit-output/decision-rules.md#br-product-st-new-active"
+      - id: BR-product-012
+        citePath: "audit-output/decision-rules.md#br-product-012"
+
+  # ── Mandatory: Create First Version ────────────────────────────────
+  - id: create-first-version
+    type: serviceTask
+    label: "Auto-create first version ('unspecified')"
+    command: product.Commands.CreateVersion
+    event: product.Events.VersionCreated
+
+  - id: check-version
+    type: exclusiveGateway
+    label: First version created successfully?
+    cites:
+      - id: BR-product-002
+        citePath: "audit-output/decision-rules.md#br-product-002"
+      - id: BR-product-006
+        citePath: "audit-output/decision-rules.md#br-product-006"
+      - id: BR-product-012
+        citePath: "audit-output/decision-rules.md#br-product-012"
+
+  # ── Mandatory: Create Default Milestone ────────────────────────────
+  - id: create-default-milestone
+    type: serviceTask
+    label: Auto-create default milestone (matching product.defaultMilestone value)
+    command: product.Commands.CreateMilestone
+    event: product.Events.MilestoneCreated
+
+  - id: check-milestone
+    type: exclusiveGateway
+    label: Default milestone created successfully?
+    cites:
+      - id: BR-product-007
+        citePath: "audit-output/decision-rules.md#br-product-007"
+      - id: BR-product-012
+        citePath: "audit-output/decision-rules.md#br-product-012"
+
+  # ── Optional: Bug Group (service-user) ─────────────────────────────
+  # searched: BR-product-*, BR-user-*; no rule formalizes the makeproductgroups
+  # global parameter — branch is purely configuration-driven. BR-product-012
+  # governs compensation semantics if this optional step fails.
+  - id: gateway-optional-group
+    type: exclusiveGateway
+    label: makeproductgroups global param enabled?
+    cite: "[unciteable: TODO]"
+    citePath: "[unciteable: TODO]"
+
+  - id: create-bug-group
+    type: serviceTask
+    label: Create bug group for product in service-user (named "<ProductName>bugs")
+    command: user.Commands.CreateGroup
+    event: user.Events.GroupCreated
+
+  - id: create-group-control-map
+    type: serviceTask
+    label: "Create group_control_map entry (membercontrol=DEFAULT, othercontrol=NA)"
+    command: product.Commands.UpdateGroupControls
+    event: product.Events.GroupControlsUpdated
+
+  # ── Optional: Charting Series (service-search) ─────────────────────
+  # searched: BR-product-*, BR-search-*; no rule formalizes the
+  # "charting enabled" global parameter — branch is configuration-driven.
+  # BR-product-012 governs compensation semantics for saga-step failure.
+  - id: gateway-optional-series
+    type: exclusiveGateway
+    label: Charting series enabled?
+    cite: "[unciteable: TODO]"
+    citePath: "[unciteable: TODO]"
+
+  - id: create-charting-series
+    type: serviceTask
+    label: "Create charting series (one per bug-status × resolution, plus all-open aggregate)"
+    command: search.Commands.CreateChartingSeries
+    event: search.Events.ChartingSeriesCreated
+
+  # ── Finalization ───────────────────────────────────────────────────
+  - id: finalize-product
+    type: serviceTask
+    label: Post-creation finalization (clear config/user caches, fire extension hooks)
+
+  - id: end-success
+    type: endEvent
+    label: Product fully created and available for bug filing
+
+  # ── Compensation Path ──────────────────────────────────────────────
+  - id: compensate-deactivate
+    type: serviceTask
+    label: "Compensate — deactivate product and clean up created resources"
+    command: product.Commands.DeactivateProduct
+    event: product.Events.ProductDeactivated
+
+  - id: end-failed
+    type: endEvent
+    label: Product creation failed — product deactivated
+
+edges:
+  # ── Happy path: mandatory steps ────────────────────────────────────
+  - from: start
+    to: create-product
+
+  - from: create-product
+    to: check-product
+
+  - from: check-product
+    to: create-first-version
+    condition: success
+
+  - from: check-product
+    to: compensate-deactivate
+    condition: failure
+
+  - from: create-first-version
+    to: check-version
+
+  - from: check-version
+    to: create-default-milestone
+    condition: success
+
+  - from: check-version
+    to: compensate-deactivate
+    condition: failure
+
+  - from: create-default-milestone
+    to: check-milestone
+
+  - from: check-milestone
+    to: gateway-optional-group
+    condition: success
+
+  - from: check-milestone
+    to: compensate-deactivate
+    condition: failure
+
+  # ── Optional branch: bug group ─────────────────────────────────────
+  - from: gateway-optional-group
+    to: create-bug-group
+    condition: makeproductgroups enabled
+
+  - from: gateway-optional-group
+    to: gateway-optional-series
+    condition: makeproductgroups disabled
+
+  - from: create-bug-group
+    to: create-group-control-map
+
+  - from: create-group-control-map
+    to: gateway-optional-series
+
+  # ── Optional branch: charting series ───────────────────────────────
+  - from: gateway-optional-series
+    to: create-charting-series
+    condition: charting enabled
+
+  - from: gateway-optional-series
+    to: finalize-product
+    condition: charting disabled
+
+  - from: create-charting-series
+    to: finalize-product
+
+  # ── Completion ─────────────────────────────────────────────────────
+  - from: finalize-product
+    to: end-success
+
+  # ── Compensation ───────────────────────────────────────────────────
+  - from: compensate-deactivate
+    to: end-failed

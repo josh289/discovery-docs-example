@@ -1,0 +1,84 @@
+{
+  "phase": "architecture",
+  "projectName": "bugzilla-evergreen",
+  "narrative": "Seven bounded contexts decomposed from the Bugzilla monolith: Bug Core (service-bug) owns issue lifecycle, status workflow, and field management; User Accounts (service-user) owns identity, groups, and API keys; Product Hierarchy (service-product) owns the structural product/component/version/milestone taxonomy; Comments (service-comment) owns append-only discussion threads; Attachments & Flags (service-attachment) owns file attachments and the flag/request/approval workflow; Search (service-search) owns Elasticsearch projection and saved queries; Notification (service-notification) owns email delivery and scheduled reports. Cross-context relationships follow Open Host Service / Published Language: every service broadcasts domain events on RabbitMQ, and downstream services subscribe via @EventHandlerDecorator. service-user is a pure upstream producer (UserCreated, GroupMemberAdded/Removed, EmailPreferencesUpdated, UserPreferencesChanged). service-product broadcasts structural configuration events (ProductCreated, ComponentCreated, VersionRenamed, etc.). service-bug is the central domain, broadcasting lifecycle events to notification, search, comment, and attachment. service-comment and service-attachment broadcast back to bug, notification, and search. service-notification and service-search are terminal consumers with no outbound domain events. Each slicer must call out every foreign-key reference into another aggregate (e.g., bugId → BugAggregate, reporterId → UserAggregate, productId → ProductAggregate) so the synthesizer can draw the cross-context diagram without re-reading every architecture doc.",
+  "slices": [
+    {
+      "id": "attachment",
+      "title": "Domain Class Diagram — attachment",
+      "focus": "Class diagram for AttachmentAggregate (with AttachmentData, Flag value objects) and FlagTypeAggregate. Capture FKs: bugId → BugAggregate (bug core), productId / componentId → ProductAggregate / ComponentAggregate (product hierarchy), requesterId / granteeId → UserAggregate (user context). Use cardinalities 1, 0..*.",
+      "paths": [
+        "output/phase-4-architecture/services/service-attachment.md",
+        "output/phase-5-specification/specs/service-attachment/SERVICE_SPEC.md"
+      ],
+      "expectedSections": ["Aggregates", "Child entities / value objects", "Cross-context foreign-key references"],
+      "sliceType": "domain-class"
+    },
+    {
+      "id": "bug",
+      "title": "Domain Class Diagram — bug",
+      "focus": "Class diagram for BugAggregate (with DependencyInfo, CcEntry, BugCustomField value objects) and StatusWorkflowConfig aggregate. Capture FKs: reporterId / assignedTo / qaContact → UserAggregate (user context), productId → ProductAggregate, componentId → ComponentAggregate, targetMilestoneId / fixVersions / confirmedVersions → MilestoneAggregate / VersionAggregate (product hierarchy). Note BugAggregate also holds cc user IDs and dependency references to other BugAggregates. Use cardinalities 1, 0..*.",
+      "paths": [
+        "output/phase-4-architecture/services/service-bug.md",
+        "output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md"
+      ],
+      "expectedSections": ["Aggregates", "Child entities / value objects", "Cross-context foreign-key references"],
+      "sliceType": "domain-class"
+    },
+    {
+      "id": "comment",
+      "title": "Domain Class Diagram — comment",
+      "focus": "Class diagram for CommentAggregate (with CommentTag, CommentAttachment value objects). Capture FKs: bugId → BugAggregate (bug core), authorId → UserAggregate (user context), attachmentId → AttachmentAggregate (attachment context when comments reference attachments). Note CommentAggregate is append-only with privacy flags and is-subscribed tracking. Use cardinalities 1, 0..*.",
+      "paths": [
+        "output/phase-4-architecture/services/service-comment.md",
+        "output/phase-5-specification/specs/service-comment/SERVICE_SPEC.md"
+      ],
+      "expectedSections": ["Aggregates", "Child entities / value objects", "Cross-context foreign-key references"],
+      "sliceType": "domain-class"
+    },
+    {
+      "id": "notification",
+      "title": "Domain Class Diagram — notification",
+      "focus": "Class diagram for ScheduledReportAggregate (with RecipientFilter, ScheduleConfig value objects). Capture FKs: userId / reporterId / assigneeId → UserAggregate (user context), bugId references → BugAggregate, productId / componentId → ProductAggregate (product hierarchy). Note service-notification is a Conformist — it subscribes to events from bug, comment, attachment, and user but emits no domain events. Use cardinalities 1, 0..*.",
+      "paths": [
+        "output/phase-4-architecture/services/service-notification.md",
+        "output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md"
+      ],
+      "expectedSections": ["Aggregates", "Child entities / value objects", "Cross-context foreign-key references"],
+      "sliceType": "domain-class"
+    },
+    {
+      "id": "product",
+      "title": "Domain Class Diagram — product",
+      "focus": "Class diagram for ProductAggregate, ComponentAggregate, VersionAggregate, and MilestoneAggregate (with GroupControl, FlagDefault value objects on ProductAggregate). Capture FKs: groupIds / controlledGroupIds → GroupAggregate (user context). Product is an upstream Supplier broadcasting structural events to bug, attachment, search, and notification. Note the four-aggregate hierarchy: Product → Component, Product → Version, Product → Milestone. Use cardinalities 1, 0..*.",
+      "paths": [
+        "output/phase-4-architecture/services/service-product.md",
+        "output/phase-5-specification/specs/service-product/SERVICE_SPEC.md"
+      ],
+      "expectedSections": ["Aggregates", "Child entities / value objects", "Cross-context foreign-key references"],
+      "sliceType": "domain-class"
+    },
+    {
+      "id": "search",
+      "title": "Domain Class Diagram — search",
+      "focus": "Class diagram for SavedSearchAggregate (with SearchCriteria, BooleanChart value objects) and the Elasticsearch projection read models. Capture FKs: userId → UserAggregate (user context). Note service-search is a Conformist — it subscribes to events from bug, product, comment, and attachment to maintain Elasticsearch indices but emits no domain events. Use cardinalities 1, 0..*.",
+      "paths": [
+        "output/phase-4-architecture/services/service-search.md",
+        "output/phase-5-specification/specs/service-search/SERVICE_SPEC.md"
+      ],
+      "expectedSections": ["Aggregates", "Child entities / value objects", "Cross-context foreign-key references"],
+      "sliceType": "domain-class"
+    },
+    {
+      "id": "user",
+      "title": "Domain Class Diagram — user",
+      "focus": "Class diagram for UserAggregate (with APIKey, UserPreference, EmailPreference value objects) and GroupAggregate (with GroupMember value object). User is a pure upstream producer — it broadcasts UserCreated, GroupMemberAdded/Removed, UserDisabled, EmailPreferencesUpdated, UserPreferencesChanged, UserWatchingChanged but holds no inbound FKs from other bounded contexts. GroupAggregate tracks group membership and permission bits. Use cardinalities 1, 0..*.",
+      "paths": [
+        "output/phase-4-architecture/services/service-user.md",
+        "output/phase-5-specification/specs/service-user/SERVICE_SPEC.md"
+      ],
+      "expectedSections": ["Aggregates", "Child entities / value objects", "Cross-context foreign-key references"],
+      "sliceType": "domain-class"
+    }
+  ]
+}

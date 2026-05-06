@@ -1,0 +1,115 @@
+{
+  "phase": "architecture",
+  "projectName": "bugzilla-evergreen",
+  "narrative": "Bugzilla-to-Banyan migration: seven CQRS/Event Sourcing microservices (bug, user, product, comment, attachment, search, notification) decomposed from the Bugzilla Perl monolith. This audit produces C4 Component diagrams (Level 3 — internal service structure) for every bounded context and C4 Code diagrams (Level 4 — class-level detail) for the two highest-risk services. All inter-service communication uses the Published Language of domain events on RabbitMQ (OHS/PL pattern). The stability vocabulary from cluster-inventory.md is: well-tested (sibling test coverage, greenfield confidence), unknown (no git churn, no nearby tests — the default for this unversioned legacy snapshot), fragile (known complex coupling), high-risk (god-object or cross-cutting dependency). Every slicer must cite paths to Phase-4 architecture docs and ADRs.",
+  "slices": [
+    {
+      "id": "attachment",
+      "title": "Component diagram for service-attachment",
+      "focus": "Document command handlers, query handlers, event subscriptions, aggregates (AttachmentAggregate, FlagTypeAggregate), read models, and projections inside service-attachment. Include the flag request/grant/deny lifecycle, BugMovedFlagRetargetHandler, and cross-service event publications to bug, comment, notification, and search.",
+      "paths": [
+        "output/phase-4-architecture/services/service-attachment.md",
+        "output/phase-4-architecture/interaction-map.md",
+        "output/phase-4-architecture/decisions/ADR-adr-005-flag-ownership.md"
+      ],
+      "expectedSections": ["Diagram", "Components Table", "Citations"],
+      "sliceType": "c4-component"
+    },
+    {
+      "id": "bug",
+      "title": "Component diagram for service-bug",
+      "focus": "Document command handlers, query handlers, event subscriptions, aggregates (BugAggregate, StatusWorkflowConfig), read models, projections, and Layer-2 policy classes inside service-bug — the central domain aggregate. Cover status workflow validation, dependency checking (NoOpenBlockersPolicy), duplicate marking, product change propagation, and the broad fan-out of domain events to notification, search, comment, and attachment services.",
+      "paths": [
+        "output/phase-4-architecture/services/service-bug.md",
+        "output/phase-4-architecture/interaction-map.md",
+        "output/phase-4-architecture/decisions/ADR-adr-001-service-boundaries.md"
+      ],
+      "expectedSections": ["Diagram", "Components Table", "Citations"],
+      "sliceType": "c4-component"
+    },
+    {
+      "id": "comment",
+      "title": "Component diagram for service-comment",
+      "focus": "Document command handlers, query handlers, event subscriptions, aggregate (CommentAggregate), read models, and projections inside service-comment. Cover append-only comment lifecycle, privacy/insider-group toggling, user-applied tags with tag weights, system comment generation (dupe-of, has-dupe, attachment-created), and outbound events to bug, notification, and search.",
+      "paths": [
+        "output/phase-4-architecture/services/service-comment.md",
+        "output/phase-4-architecture/interaction-map.md"
+      ],
+      "expectedSections": ["Diagram", "Components Table", "Citations"],
+      "sliceType": "c4-component"
+    },
+    {
+      "id": "notification",
+      "title": "Component diagram for service-notification",
+      "focus": "Document event subscription handlers, aggregates (ScheduledReportAggregate), read models, and the email rendering pipeline inside service-notification — a terminal consumer with no outbound events. Cover recipient computation, per-user templated email rendering, Whine scheduled reports, and background job queue integration.",
+      "paths": [
+        "output/phase-4-architecture/services/service-notification.md",
+        "output/phase-4-architecture/interaction-map.md"
+      ],
+      "expectedSections": ["Diagram", "Components Table", "Citations"],
+      "sliceType": "c4-component"
+    },
+    {
+      "id": "product",
+      "title": "Component diagram for service-product",
+      "focus": "Document command handlers, query handlers, event subscriptions, aggregates (ProductAggregate, ComponentAggregate, VersionAggregate, MilestoneAggregate), read models, and projections inside service-product. Cover the Classification → Product → Component hierarchy, mandatory-group cascading, and outbound events consumed by bug, attachment, search, and notification services.",
+      "paths": [
+        "output/phase-4-architecture/services/service-product.md",
+        "output/phase-4-architecture/interaction-map.md",
+        "output/phase-4-architecture/decisions/ADR-adr-006-group-permission-three-way-split.md"
+      ],
+      "expectedSections": ["Diagram", "Components Table", "Citations"],
+      "sliceType": "c4-component"
+    },
+    {
+      "id": "search",
+      "title": "Component diagram for service-search",
+      "focus": "Document command handlers, query handlers, event subscriptions, aggregate (SavedSearchAggregate), read models, and the Elasticsearch integration inside service-search — primarily a query-side service with no outbound domain events. Cover boolean-chart AST migration, saved/shared queries, chart/reporting, and event-driven index updates from bug, comment, attachment, and product services.",
+      "paths": [
+        "output/phase-4-architecture/services/service-search.md",
+        "output/phase-4-architecture/interaction-map.md",
+        "output/phase-4-architecture/decisions/ADR-adr-004-elasticsearch-search-engine.md"
+      ],
+      "expectedSections": ["Diagram", "Components Table", "Citations"],
+      "sliceType": "c4-component"
+    },
+    {
+      "id": "user",
+      "title": "Component diagram for service-user",
+      "focus": "Document command handlers, query handlers, event subscriptions, aggregates (UserAggregate, GroupAggregate), read models, and projections inside service-user — a pure upstream producer. Cover multi-method authentication, group membership lifecycle, API key management, user settings, and outbound events consumed by bug, product, and notification services.",
+      "paths": [
+        "output/phase-4-architecture/services/service-user.md",
+        "output/phase-4-architecture/interaction-map.md",
+        "output/phase-4-architecture/decisions/ADR-adr-008-user-identity-surrogate-id.md"
+      ],
+      "expectedSections": ["Diagram", "Components Table", "Citations"],
+      "sliceType": "c4-component"
+    },
+    {
+      "id": "bug-code",
+      "title": "Code diagram for service-bug (HIGH risk — central god-object aggregate)",
+      "focus": "Class diagram of BugAggregate hierarchy: AggregateRoot → BugAggregate, StatusWorkflowConfig, value objects (DependencyInfo, CustomFieldValue, CcEntry). Map the command handler delegation chain, policy evaluation order, and event emission points. Risk source: BugAggregate is the architectural descendant of Bugzilla::Bug (5 123 LOC god-object) and is consumed by every other service via domain events — unknown stability, no test coverage signals.",
+      "paths": [
+        "output/phase-4-architecture/services/service-bug.md",
+        "output/phase-4-architecture/interaction-map.md",
+        "output/phase-4-architecture/context-map.md",
+        "audit-output/cluster-inventory.md"
+      ],
+      "expectedSections": ["Class Diagram", "Citations"],
+      "sliceType": "c4-code"
+    },
+    {
+      "id": "attachment-code",
+      "title": "Code diagram for service-attachment (HIGH risk — largest non-bug service, cross-cutting flag system)",
+      "focus": "Class diagram of AttachmentAggregate and FlagTypeAggregate: AggregateRoot → AttachmentAggregate, FlagTypeAggregate, value objects (Flag, FlagRequest). Map the flag request/grant/deny state machine, BugMovedFlagRetargetHandler's cross-service re-evaluation logic, and dual-target flags (bug-level vs attachment-level). Risk source: service-attachment.md is the largest non-bug service doc (43 605 bytes), Bugzilla::Flag was 1 309 LOC with cross-cutting concerns to both bugs and attachments, unknown stability.",
+      "paths": [
+        "output/phase-4-architecture/services/service-attachment.md",
+        "output/phase-4-architecture/interaction-map.md",
+        "output/phase-4-architecture/decisions/ADR-adr-005-flag-ownership.md",
+        "audit-output/cluster-inventory.md"
+      ],
+      "expectedSections": ["Class Diagram", "Citations"],
+      "sliceType": "c4-code"
+    }
+  ]
+}

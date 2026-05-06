@@ -1,0 +1,63 @@
+{
+  "phase": "architecture",
+  "projectName": "bugzilla-evergreen",
+  "narrative": "Decision-rules audit for the bugzilla-evergreen build. In scope: every service with a SERVICE_SPEC.md under output/phase-5-specification/specs/ — currently service-attachment, service-bug, service-comment, service-notification, service-product, service-search, and service-user (7 services). Rule IDs use the convention BR-{svc}-NNN for numbered Business Rules, BR-{svc}-PERM-{Cmd} for Layer-1 permissions, BR-{svc}-POLICY-{ClassName} for Layer-2 policies, BR-{svc}-ST-{From}-{To} for state transitions, and BR-{svc}-NOTIF-{EventName} for notification triggers. The synthesizer will concatenate every per-service Master Table into one project-wide Master Table at audit-output/decision-rules.md, then build 5 category sub-sections (state-transition / permission / validation / business-policy / notification), then surface duplicates and unclear-intent rules.",
+  "slices": [
+    {
+      "id": "rules-attachment",
+      "title": "Decision rules for service-attachment",
+      "focus": "Mine ## Business Rules (numbered list), ## Authorization (Layer 1 permissions + Layer 2 policy classes), ## State Machines (transition tables), ## Validation / Field Validation, and ## Notifications. Target ≥10 rules — attachments are a supporting aggregate with file-type and size constraints.",
+      "paths": ["output/phase-5-specification/specs/service-attachment/SERVICE_SPEC.md"],
+      "expectedSections": ["Master Table"],
+      "sliceType": "service-rules"
+    },
+    {
+      "id": "rules-bug",
+      "title": "Decision rules for service-bug",
+      "focus": "Mine ## Business Rules (numbered list), ## State Machines (transition tables), ## Authorization (Layer 1 permissions + Layer 2 policy classes), ## Validation / Field Validation, and ## Notifications. Target ≥20 rules — service-bug is the central aggregate with lifecycle state transitions, priority/severity enums, and cross-service event emissions.",
+      "paths": ["output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md"],
+      "expectedSections": ["Master Table"],
+      "sliceType": "service-rules"
+    },
+    {
+      "id": "rules-comment",
+      "title": "Decision rules for service-comment",
+      "focus": "Mine ## Business Rules (numbered list), ## Authorization (Layer 1 permissions + Layer 2 policy classes), ## State Machines (transition tables if any), ## Validation / Field Validation, and ## Notifications. Target ≥12 rules — comments attach to bugs and may have visibility constraints and edit-window policies.",
+      "paths": ["output/phase-5-specification/specs/service-comment/SERVICE_SPEC.md"],
+      "expectedSections": ["Master Table"],
+      "sliceType": "service-rules"
+    },
+    {
+      "id": "rules-notification",
+      "title": "Decision rules for service-notification",
+      "focus": "Mine ## Business Rules (numbered list), ## Authorization (Layer 1 permissions + Layer 2 policy classes), ## State Machines (notification lifecycle), ## Validation / Field Validation, and ## Notifications / Notification Triggers. Target ≥12 rules — notification covers channel routing, preference filtering, and delivery state transitions.",
+      "paths": ["output/phase-5-specification/specs/service-notification/SERVICE_SPEC.md"],
+      "expectedSections": ["Master Table"],
+      "sliceType": "service-rules"
+    },
+    {
+      "id": "rules-product",
+      "title": "Decision rules for service-product",
+      "focus": "Mine ## Business Rules (numbered list), ## Authorization (Layer 1 permissions + Layer 2 policy classes), ## State Machines (product/component lifecycle), ## Validation / Field Validation, and ## Notifications. Target ≥10 rules — product/component hierarchy with ownership and default-assignee rules.",
+      "paths": ["output/phase-5-specification/specs/service-product/SERVICE_SPEC.md"],
+      "expectedSections": ["Master Table"],
+      "sliceType": "service-rules"
+    },
+    {
+      "id": "rules-search",
+      "title": "Decision rules for service-search",
+      "focus": "Mine ## Business Rules (numbered list), ## Authorization (Layer 1 permissions + Layer 2 policy classes), ## State Machines if applicable, ## Validation / Field Validation, and ## Notifications. Target ≥8 rules — search is a read-side projection service with indexing and query-validation constraints.",
+      "paths": ["output/phase-5-specification/specs/service-search/SERVICE_SPEC.md"],
+      "expectedSections": ["Master Table"],
+      "sliceType": "service-rules"
+    },
+    {
+      "id": "rules-user",
+      "title": "Decision rules for service-user",
+      "focus": "Mine ## Business Rules (numbered list), ## Authorization (Layer 1 permissions + Layer 2 policy classes), ## State Machines (user lifecycle / activation states), ## Validation / Field Validation, and ## Notifications. Target ≥12 rules — user covers registration, profile management, role assignments, and account-state transitions.",
+      "paths": ["output/phase-5-specification/specs/service-user/SERVICE_SPEC.md"],
+      "expectedSections": ["Master Table"],
+      "sliceType": "service-rules"
+    }
+  ]
+}
