@@ -89,10 +89,10 @@ service-notification is the system's terminal event consumer: it sinks 19 distin
 
 ```mermaid
 flowchart LR
-    classDef producer fill:#dbeafe,stroke:#1d4ed8,color:#0b1f4d,stroke-width:1px
-    classDef bus fill:#fef3c7,stroke:#b45309,color:#3a1d00,stroke-width:1px
-    classDef event fill:#ede9fe,stroke:#6d28d9,color:#1f1147,stroke-width:1px
-    classDef terminal fill:#dcfce7,stroke:#15803d,color:#052e16,stroke-width:2px
+    classDef producer fill:#1f6feb,stroke:#0d3a82,color:#ffffff,stroke-width:1px
+    classDef bus fill:#9a6700,stroke:#5e3500,color:#ffffff,stroke-width:1px
+    classDef event fill:#bc4c00,stroke:#762c00,color:#ffffff,stroke-width:1px
+    classDef terminal fill:#cf222e,stroke:#86181d,color:#ffffff,stroke-width:2px
 
     sb["service-bug"]:::producer
     sc["service-comment"]:::producer

@@ -54,7 +54,7 @@ flowchart TD
     createChartingSeries --> finalize
     finalize --> endHappy
 
-    classDef gateway fill:#fef3c7,stroke:#d97706
+    classDef gateway fill:#9a6700,stroke:#5e3500,color:#ffffff
     class checkProduct,checkVersion,checkMilestone,gwGroup,gwSeries gateway
 ```
 
@@ -76,7 +76,7 @@ flowchart TD
     checkMilestone -.->|failure| compensate
     compensate --> endRollback
 
-    classDef gateway fill:#fef3c7,stroke:#d97706
+    classDef gateway fill:#9a6700,stroke:#5e3500,color:#ffffff
     class checkProduct,checkVersion,checkMilestone gateway
 ```
 
@@ -187,30 +187,47 @@ The product is now fully created and available for bug filing.
 
 ## Event Flow
 
-```
-service-product                    service-user                  service-search
-     │                                  │                              │
-     │ ① CreateProduct                  │                              │
-     │──ProductCreated──────────────────│──────────────────────────────│
-     │         │                        │                              │
-     │ ② CreateVersion                  │                              │
-     │──VersionCreated──────────────────│──────────────────────────────│
-     │         │                        │                              │
-     │ ③ CreateMilestone                │                              │
-     │──MilestoneCreated────────────────│──────────────────────────────│
-     │         │                        │                              │
-     │ ④ [if makeproductgroups]         │                              │
-     │ CreateGroup ──────────────────→  │                              │
-     │         │              GroupCreated                             │
-     │ ⑤ UpdateGroupControls            │                              │
-     │──GroupControlsUpdated────────────│──────────────────────────────│
-     │         │                        │                              │
-     │ ⑥ [if charting]                  │                              │
-     │ CreateChartingSeries ────────────────────────────────────────→  │
-     │         │                                     ChartingSeriesCreated
-     │         │                        │                              │
-     │ ⑦ Finalize                       │                              │
-     │ ✓ end-success                    │                              │
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#1f6feb',
+  'primaryTextColor':'#ffffff',
+  'primaryBorderColor':'#0d3a82',
+  'lineColor':'#7d8590',
+  'actorBkg':'#1f6feb',
+  'actorTextColor':'#ffffff',
+  'actorBorder':'#0d3a82',
+  'noteBkgColor':'#bc4c00',
+  'noteTextColor':'#ffffff',
+  'noteBorderColor':'#762c00',
+  'sequenceNumberColor':'#ffffff',
+  'background':'transparent'
+}}}%%
+sequenceDiagram
+    participant Product as service-product
+    participant User as service-user
+    participant Search as service-search
+
+    Note over Product: ① CreateProduct
+    Product-->>Product: ProductCreated
+
+    Note over Product: ② CreateVersion
+    Product-->>Product: VersionCreated
+
+    Note over Product: ③ CreateMilestone
+    Product-->>Product: MilestoneCreated
+
+    Note over Product,User: ④ if makeproductgroups
+    Product->>User: CreateGroup
+    User-->>Product: GroupCreated
+
+    Note over Product: ⑤ UpdateGroupControls
+    Product-->>Product: GroupControlsUpdated
+
+    Note over Product,Search: ⑥ if charting
+    Product->>Search: CreateChartingSeries
+    Search-->>Product: ChartingSeriesCreated
+
+    Note over Product: ⑦ Finalize — saga complete
 ```
 
 ### Key events broadcast to consumers

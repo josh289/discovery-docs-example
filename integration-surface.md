@@ -299,10 +299,10 @@ flowchart LR
     bus -->|"bug.Events.* + comment.Events.* + attachment.Events.* (24)"| notification
     bus -->|"bug.Events.* + comment.Events.* + attachment.Events.* + product.Events.*Renamed (16)"| search
 
-    classDef producer fill:#cfe8ff,stroke:#1f6feb,color:#000;
-    classDef terminal fill:#ffe0b3,stroke:#d97706,color:#000;
-    classDef leaf fill:#e6e6e6,stroke:#666,color:#000;
-    classDef busNode fill:#fff3b0,stroke:#b58900,color:#000;
+    classDef producer fill:#1f6feb,stroke:#0d3a82,color:#ffffff;
+    classDef terminal fill:#cf222e,stroke:#86181d,color:#ffffff;
+    classDef leaf fill:#57606a,stroke:#3a4148,color:#ffffff;
+    classDef busNode fill:#9a6700,stroke:#5e3500,color:#ffffff;
     class bug,user,product,comment,attachment producer;
     class notification,search terminal;
     class bus busNode;

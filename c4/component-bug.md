@@ -334,10 +334,10 @@ The diagram below visualizes service-bug's role as a downstream consumer: 19 eve
 
 ```mermaid
 flowchart LR
-    classDef producer fill:#cfe8ff,stroke:#1f77b4,color:#0b3d66
-    classDef bus fill:#e6e6e6,stroke:#666,color:#222
-    classDef handler fill:#fff5b3,stroke:#b58900,color:#5a4500
-    classDef readmodel fill:#cdebc5,stroke:#2e7d32,color:#1b3d1b
+    classDef producer fill:#1f6feb,stroke:#0d3a82,color:#ffffff
+    classDef bus fill:#9a6700,stroke:#5e3500,color:#ffffff
+    classDef handler fill:#1a7f37,stroke:#0a4621,color:#ffffff
+    classDef readmodel fill:#8250df,stroke:#3e1f79,color:#ffffff
 
     sp["service-product"]:::producer
     su["service-user"]:::producer

@@ -71,7 +71,7 @@ flowchart TD
     seedCommentScope --> endCreated
     seedAttachmentScope --> endCreated
 
-    classDef gateway fill:#fef3c7,stroke:#d97706,color:#000
+    classDef gateway fill:#9a6700,stroke:#5e3500,color:#ffffff
     class gatewayPostCreation gateway
 ```
 
@@ -188,7 +188,7 @@ flowchart TD
     notifyResolved --> endStatusTransitioned
     indexStatusChange --> endStatusTransitioned
 
-    classDef gateway fill:#fef3c7,stroke:#d97706,color:#000
+    classDef gateway fill:#9a6700,stroke:#5e3500,color:#ffffff
     class gatewayTransitionType,gatewayPostTransition gateway
 ```
 
@@ -430,35 +430,62 @@ Consumed by:
 
 ### Event Flow Diagram
 
-```
-                         ┌─────────────┐
-          CreateBug ────▶│ service-bug │───▶ BugCreated
-                         └──────┬──────┘          │
-                               │                  ├─────────────▶ service-notification (email)
-                               │                  ├─────────────▶ service-search (index)
-                               │                  ├─────────────▶ service-comment (scope)
-                               │                  └─────────────▶ service-attachment (scope)
-                               │
-          TransitionBugStatus   │
-          ───────────────────▶  │───▶ BugStatusTransitioned
-                               │          │
-                               │          ├─────▶ service-notification (status email)
-                               │          │         └── dep_only cascade on resolve
-                               │          └─────▶ service-search (reindex)
-                               │
-          CreateComment ───────┼───▶ (routed to service-comment)
-                               │          │
-                               │     CommentCreated
-                               │          │
-                               │          ├─────▶ service-notification (comment email)
-                               │          └─────▶ service-bug (time-tracking projection)
-                               │
-          CreateAttachment ────┼───▶ (routed to service-attachment)
-                                       │
-                                  AttachmentCreated
-                                       │
-                                       ├─────▶ service-notification (attachment email)
-                                       └─────▶ service-comment (system comment)
+```mermaid
+flowchart LR
+    cmdCreate["CreateBug"]
+    cmdTransition["TransitionBugStatus"]
+    cmdComment["CreateComment"]
+    cmdAttach["CreateAttachment"]
+
+    svcBug["service-bug"]
+    svcComment["service-comment"]
+    svcAttachment["service-attachment"]
+
+    evtBugCreated["BugCreated"]
+    evtBugTransitioned["BugStatusTransitioned"]
+    evtCommentCreated["CommentCreated"]
+    evtAttachmentCreated["AttachmentCreated"]
+
+    consNotification["service-notification (email)"]
+    consSearch["service-search (index)"]
+    consCommentScope["service-comment (scope)"]
+    consAttachmentScope["service-attachment (scope)"]
+    consBugTime["service-bug (time-tracking)"]
+    consCommentSys["service-comment (system comment)"]
+
+    cmdCreate --> svcBug
+    cmdTransition --> svcBug
+    cmdComment --> svcComment
+    cmdAttach --> svcAttachment
+
+    svcBug --> evtBugCreated
+    svcBug --> evtBugTransitioned
+    svcComment --> evtCommentCreated
+    svcAttachment --> evtAttachmentCreated
+
+    evtBugCreated --> consNotification
+    evtBugCreated --> consSearch
+    evtBugCreated --> consCommentScope
+    evtBugCreated --> consAttachmentScope
+
+    evtBugTransitioned -- "status email; dep_only cascade on resolve" --> consNotification
+    evtBugTransitioned -- "reindex" --> consSearch
+
+    evtCommentCreated -- "comment email" --> consNotification
+    evtCommentCreated -- "time-tracking projection" --> consBugTime
+
+    evtAttachmentCreated -- "attachment email" --> consNotification
+    evtAttachmentCreated -- "system comment" --> consCommentSys
+
+    classDef cmd       fill:#57606a,stroke:#3a4148,color:#ffffff
+    classDef service   fill:#1f6feb,stroke:#0d3a82,color:#ffffff
+    classDef event     fill:#bc4c00,stroke:#762c00,color:#ffffff
+    classDef consumer  fill:#cf222e,stroke:#86181d,color:#ffffff
+
+    class cmdCreate,cmdTransition,cmdComment,cmdAttach cmd
+    class svcBug,svcComment,svcAttachment service
+    class evtBugCreated,evtBugTransitioned,evtCommentCreated,evtAttachmentCreated event
+    class consNotification,consSearch,consCommentScope,consAttachmentScope,consBugTime,consCommentSys consumer
 ```
 
 ---

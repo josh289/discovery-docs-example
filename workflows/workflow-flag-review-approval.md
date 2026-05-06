@@ -1,6 +1,6 @@
 # Flag Review & Approval Workflow
 
-## ## Workflow Overview
+## Workflow Overview
 
 The Flag Review & Approval Workflow governs the lifecycle of review and approval flags in Bugzilla — the mechanism by which users request code reviews, approvals, feedback, and other sign-offs from designated reviewers. Flags can be set on either attachments (e.g., a patch needing review) or directly on bugs (e.g., a release-approval flag). The workflow covers the complete flag lifecycle: requesting review (`?` status), granting (`+`) or denying (`-`), clearing (`X`), and compensating actions when the surrounding context changes (attachment obsolescence, bug product moves, admin rule changes).
 
@@ -60,7 +60,7 @@ flowchart TD
     notifyGranted --> endGranted
     notifyDenied --> endDenied
 
-    classDef gateway fill:#fef3c7,stroke:#d97706
+    classDef gateway fill:#9a6700,stroke:#5e3500,color:#ffffff
     class gwApplicable,gwReqValid,gwDecision gateway
 ```
 
@@ -99,7 +99,7 @@ flowchart TD
     gwRetarget -->|matching type found| endRetargeted
     gwRetarget -->|no matching type| endRetargetRemoved
 
-    classDef gateway fill:#fef3c7,stroke:#d97706
+    classDef gateway fill:#9a6700,stroke:#5e3500,color:#ffffff
     class gwRetarget gateway
 ```
 
@@ -119,7 +119,7 @@ flowchart LR
     forceCleanup --> endRulesCleanup
 ```
 
-## ## Participants
+## Participants
 
 | Service | Role | Responsibility |
 |---------|------|----------------|
@@ -127,7 +127,7 @@ flowchart LR
 | `service-notification` | **Participant** | Subscribes to `FlagSet`, `FlagGranted`, `FlagDenied`, and `AttachmentFlagCleared` events. Resolves recipients (requestee, setter, CC list) filtered by bug group visibility and private attachment visibility. Renders and delivers email. |
 | `service-bug` | **Participant** | Emits `BugMoved` events when a bug's product or component changes. This triggers flag retargeting in `service-attachment`. |
 
-## ## Trigger
+## Trigger
 
 The workflow is triggered by a **user action**: an authenticated user sets a flag with `?` status on a bug or attachment, optionally specifying a requestee (the person asked to review or approve). This is an interactive operation — the user selects a flag type from the available types (resolved via inclusion/exclusion rules for the target's product/component), sets the status to `?`, and optionally picks a specific requestee.
 
@@ -137,7 +137,7 @@ Three compensating triggers can interrupt or modify the workflow after initiatio
 2. **Bug product/component move** — when `service-bug` emits `BugMoved`, `service-attachment` retargets or removes flags whose types are no longer applicable.
 3. **Admin rule change** — when a flag type's inclusion/exclusion rules are updated, a force-cleanup removes now-invalid flags.
 
-## ## Steps
+## Steps
 
 ### Step 1 — Resolve Flag Type Applicability
 
@@ -226,17 +226,46 @@ For multiplicable flags, multiple reviewers may each set their own flag instance
 
 The flag review is complete. The flag remains on the target with its final status (`+` or `-`) until explicitly cleared or the flag type is deactivated.
 
-## ## Event Flow
+## Event Flow
 
 ### Primary Event Sequence (Happy Path)
 
-```
-1. User action → attachment.Commands.SetAttachmentFlag(status='?', requestee=userId)
-2. service-attachment → emits attachment.Events.FlagSet
-3. service-notification ← subscribes to FlagSet → sends email to requestee + CC list
-4. User action → attachment.Commands.SetAttachmentFlag(status='+' or '-')
-5. service-attachment → emits attachment.Events.FlagGranted | FlagDenied
-6. service-notification ← subscribes to FlagGranted/FlagDenied → sends email to setter + CC list
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#1f6feb',
+  'primaryTextColor':'#ffffff',
+  'primaryBorderColor':'#0d3a82',
+  'lineColor':'#7d8590',
+  'actorBkg':'#1f6feb',
+  'actorTextColor':'#ffffff',
+  'actorBorder':'#0d3a82',
+  'noteBkgColor':'#bc4c00',
+  'noteTextColor':'#ffffff',
+  'noteBorderColor':'#762c00',
+  'sequenceNumberColor':'#ffffff',
+  'background':'transparent'
+}}}%%
+sequenceDiagram
+    actor Setter
+    actor Reviewer
+    participant Attach as service-attachment
+    participant Notify as service-notification
+
+    Setter->>Attach: attachment.Commands.SetAttachmentFlag(status='?', requestee=userId)
+    Attach-->>Notify: attachment.Events.FlagSet
+    Note over Notify: subscribes to FlagSet
+    Notify->>Reviewer: email to requestee + CC list
+
+    Reviewer->>Attach: attachment.Commands.SetAttachmentFlag(status='+' or '-')
+    alt Granted
+        Attach-->>Notify: attachment.Events.FlagGranted
+        Note over Notify: subscribes to FlagGranted
+        Notify->>Setter: email to setter + CC list
+    else Denied
+        Attach-->>Notify: attachment.Events.FlagDenied
+        Note over Notify: subscribes to FlagDenied
+        Notify->>Setter: email to setter + CC list
+    end
 ```
 
 ### Cross-Service Event Subscriptions
@@ -259,7 +288,7 @@ For `service-notification` to render emails without querying back to `service-at
 - **FlagGranted/FlagDenied**: `{ flagId, flagTypeName, targetBugId, targetBugSummary, attachId?, attachDescription?, setterId, setterNick, requesteeId?, requesteeNick?, previousStatus, newStatus, reviewerId, reviewerNick }`
 - **AttachmentFlagCleared**: `{ flagId, flagTypeName, targetBugId, attachId?, setterId, setterNick, previousStatus, reason }`
 
-## ## Error Handling & Compensation
+## Error Handling & Compensation
 
 ### Attachment Obsolescence Cascade
 
@@ -317,7 +346,7 @@ This is not a compensation scenario — it's a validation gate that prevents inv
 
 If the flag type is not multiplicable and a flag of the same type already exists on the target, the aggregate's concurrency control will reject the second creation attempt. The user receives an error indicating the flag type is already set. This is a standard optimistic concurrency conflict, not a compensation scenario.
 
-## ## Data Consistency Model
+## Data Consistency Model
 
 ### Aggregate Ownership
 
