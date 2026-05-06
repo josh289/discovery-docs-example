@@ -1,6 +1,6 @@
-# Bugzilla → Banyan CQRS — Modernization Audit
+# Bugzilla → Greenfield CQRS — Modernization Audit
 
-A complete modernization-audit deliverable produced by an agentic software factory ("Evergreen"). The source under audit is the **Bugzilla Perl monolith** (~864 files, ~111 kLOC). The target architecture is a re-architected **Banyan CQRS / Event Sourcing** microservices system (TypeScript, 7 services).
+A complete modernization-audit deliverable produced by an agentic software factory ("Evergreen"). The source under audit is the **Bugzilla Perl monolith** (~864 files, ~111 kLOC). The target architecture is a re-architected **Greenfield CQRS / Event Sourcing** microservices system (TypeScript, 7 services).
 
 This repository is an **example deliverable** — what a modernization-audit engagement workspace looks like end-to-end, with every claim cited back to the analyzed source.
 
