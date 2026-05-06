@@ -8,6 +8,78 @@ The saga is triggered by an admin action and proceeds through three mandatory st
 
 **ADR-013 impact**: Version and milestone references in bugs use IDs, not denormalized strings. This eliminates the need for rename-propagation events to service-bug — `VersionRenamed` and `MilestoneRenamed` are handled entirely within service-product's projections.
 
+## Workflow Diagram (Mermaid)
+
+### Happy Path
+
+```mermaid
+flowchart TD
+    startEv(("Start: Admin submits<br>CreateProduct"))
+
+    subgraph product["service-product"]
+        createProduct["Create Product aggregate<br>(name, description, classification,<br>defaultMilestone)"]
+        checkProduct{"Product created<br>successfully?"}
+        createVersion["Auto-create first version<br>('unspecified')"]
+        checkVersion{"First version created<br>successfully?"}
+        createMilestone["Auto-create default milestone<br>(matches defaultMilestone value)"]
+        checkMilestone{"Default milestone created<br>successfully?"}
+        gwGroup{"makeproductgroups<br>enabled?"}
+        createGroupControlMap["Create group_control_map<br>(membercontrol=DEFAULT,<br>othercontrol=NA)"]
+        gwSeries{"Charting series<br>enabled?"}
+        finalize["Post-creation finalization<br>(clear caches, fire hooks)"]
+        endHappy([End: Product created<br>and available for bug filing])
+    end
+
+    subgraph user["service-user"]
+        createBugGroup["Create bug group<br>('ProductNamebugs')"]
+    end
+
+    subgraph search["service-search"]
+        createChartingSeries["Create charting series<br>(per status x resolution<br>+ all-open aggregate)"]
+    end
+
+    startEv --> createProduct
+    createProduct --> checkProduct
+    checkProduct -->|success| createVersion
+    createVersion --> checkVersion
+    checkVersion -->|success| createMilestone
+    createMilestone --> checkMilestone
+    checkMilestone -->|success| gwGroup
+    gwGroup -->|makeproductgroups enabled| createBugGroup
+    gwGroup -->|makeproductgroups disabled| gwSeries
+    createBugGroup --> createGroupControlMap
+    createGroupControlMap --> gwSeries
+    gwSeries -->|charting enabled| createChartingSeries
+    gwSeries -->|charting disabled| finalize
+    createChartingSeries --> finalize
+    finalize --> endHappy
+
+    classDef gateway fill:#fef3c7,stroke:#d97706
+    class checkProduct,checkVersion,checkMilestone,gwGroup,gwSeries gateway
+```
+
+### Compensation Paths
+
+```mermaid
+flowchart TD
+    checkProduct{"Product created<br>successfully?"}
+    checkVersion{"First version created<br>successfully?"}
+    checkMilestone{"Default milestone created<br>successfully?"}
+
+    subgraph compensation["Compensation (service-product)"]
+        compensate["Deactivate product<br>and clean up created resources<br>(DeactivateProduct)"]
+        endRollback([End: Product creation failed<br>product deactivated])
+    end
+
+    checkProduct -.->|failure| compensate
+    checkVersion -.->|failure| compensate
+    checkMilestone -.->|failure| compensate
+    compensate --> endRollback
+
+    classDef gateway fill:#fef3c7,stroke:#d97706
+    class checkProduct,checkVersion,checkMilestone gateway
+```
+
 ## Trigger
 
 **User action**: An administrator creates a new product through the admin API or UI.

@@ -23,6 +23,225 @@ The BPMN definition captures **seven sub-flows** that together represent the bug
 
 ---
 
+## Workflow Diagrams (Mermaid)
+
+The seven sub-flows from the BPMN are rendered below as separate Mermaid flowcharts so each remains readable. Tasks are grouped by participant service via `subgraph` blocks; gateways are shown as diamonds with branch labels mirroring the `condition` fields in the BPMN.
+
+### Sub-flow 1 — Bug Creation
+
+```mermaid
+flowchart TD
+    startCreate(("Start: File a Bug form"))
+
+    subgraph bug["service-bug"]
+        validateProductAccess["Validate user can enter product<br/>(group_control_map)"]
+        validateWorkflowStatus["Resolve initial status<br/>from StatusWorkflowConfig"]
+        createBugAggregate["Create BugAggregate<br/>(fields, CC, groups, keywords)"]
+        gatewayPostCreation{"Post-creation<br/>fan-out"}
+    end
+
+    subgraph notif["service-notification"]
+        notifyBugCreated["Send 'new bug' email to<br/>CC, assignee, QA, reporter"]
+    end
+
+    subgraph search["service-search"]
+        indexBugCreated["Index new bug in search engine"]
+    end
+
+    subgraph comment["service-comment"]
+        seedCommentScope["Initialize comment scope<br/>for new bug"]
+    end
+
+    subgraph attachment["service-attachment"]
+        seedAttachmentScope["Initialize attachment scope<br/>for new bug"]
+    end
+
+    endCreated((("End: Bug created")))
+
+    startCreate --> validateProductAccess
+    validateProductAccess --> validateWorkflowStatus
+    validateWorkflowStatus --> createBugAggregate
+    createBugAggregate --> gatewayPostCreation
+    gatewayPostCreation --> notifyBugCreated
+    gatewayPostCreation --> indexBugCreated
+    gatewayPostCreation --> seedCommentScope
+    gatewayPostCreation --> seedAttachmentScope
+    notifyBugCreated --> endCreated
+    indexBugCreated --> endCreated
+    seedCommentScope --> endCreated
+    seedAttachmentScope --> endCreated
+
+    classDef gateway fill:#fef3c7,stroke:#d97706,color:#000
+    class gatewayPostCreation gateway
+```
+
+### Sub-flow 2 — Comment Addition
+
+```mermaid
+flowchart TD
+    startComment(("Start: User adds a comment"))
+
+    subgraph comment["service-comment"]
+        createComment["Create CommentAggregate<br/>(body, privacy, tags, work_time)"]
+    end
+
+    subgraph notif["service-notification"]
+        notifyCommentCreated["Send 'new comment' email<br/>to bug stakeholders"]
+    end
+
+    subgraph bug["service-bug"]
+        projectCommentWorkTime["Project work_time into<br/>BugTimeTrackingReadModel"]
+    end
+
+    endCommentAdded((("End: Comment recorded")))
+
+    startComment --> createComment
+    createComment --> notifyCommentCreated
+    createComment --> projectCommentWorkTime
+    notifyCommentCreated --> endCommentAdded
+    projectCommentWorkTime --> endCommentAdded
+```
+
+### Sub-flow 3 — Attachment Addition
+
+```mermaid
+flowchart TD
+    startAttachment(("Start: User uploads attachment"))
+
+    subgraph attachment["service-attachment"]
+        createAttachment["Create AttachmentAggregate<br/>(binary to object storage,<br/>metadata, flags)"]
+    end
+
+    subgraph notif["service-notification"]
+        notifyAttachmentCreated["Send 'new attachment' email<br/>to bug stakeholders"]
+    end
+
+    subgraph comment["service-comment"]
+        createAttachmentSystemComment["Create system comment<br/>(type ATTACHMENT_CREATED)"]
+    end
+
+    endAttachmentAdded((("End: Attachment stored")))
+
+    startAttachment --> createAttachment
+    createAttachment --> notifyAttachmentCreated
+    createAttachment --> createAttachmentSystemComment
+    notifyAttachmentCreated --> endAttachmentAdded
+    createAttachmentSystemComment --> endAttachmentAdded
+```
+
+### Sub-flow 4 — Field Update
+
+```mermaid
+flowchart TD
+    startUpdate(("Start: User updates bug fields"))
+
+    subgraph bug["service-bug"]
+        updateBug["Apply field changes with<br/>validator dependency ordering"]
+    end
+
+    subgraph notif["service-notification"]
+        notifyBugUpdated["Send changed-field<br/>notification email"]
+    end
+
+    endBugUpdated((("End: Bug fields updated")))
+
+    startUpdate --> updateBug
+    updateBug --> notifyBugUpdated
+    notifyBugUpdated --> endBugUpdated
+```
+
+### Sub-flow 5 — Status Transition
+
+```mermaid
+flowchart TD
+    startStatus(("Start: User changes bug status"))
+
+    subgraph bug["service-bug"]
+        validateTransition["Validate status transition<br/>against StatusWorkflowConfig"]
+        gatewayTransitionType{"Transition type?"}
+        checkOpenBlockers["NoOpenBlockersPolicy:<br/>query dependency read model"]
+        applyStatusTransition["Apply transition: update status,<br/>resolution, everConfirmed"]
+        gatewayPostTransition{"Post-transition<br/>fan-out"}
+    end
+
+    subgraph notif["service-notification"]
+        notifyStatusChanged["Send status/resolution<br/>change email"]
+        notifyResolved["Send resolution notification<br/>+ dependency cascade"]
+    end
+
+    subgraph search["service-search"]
+        indexStatusChange["Update search index with<br/>new status/resolution"]
+    end
+
+    endStatusTransitioned((("End: Status changed")))
+
+    startStatus --> validateTransition
+    validateTransition --> gatewayTransitionType
+    gatewayTransitionType -->|"resolution == FIXED"| checkOpenBlockers
+    gatewayTransitionType -->|"resolution != FIXED"| applyStatusTransition
+    checkOpenBlockers -->|"no open blockers"| applyStatusTransition
+    applyStatusTransition --> gatewayPostTransition
+    gatewayPostTransition --> notifyStatusChanged
+    gatewayPostTransition -->|"new status is closed"| notifyResolved
+    gatewayPostTransition --> indexStatusChange
+    notifyStatusChanged --> endStatusTransitioned
+    notifyResolved --> endStatusTransitioned
+    indexStatusChange --> endStatusTransitioned
+
+    classDef gateway fill:#fef3c7,stroke:#d97706,color:#000
+    class gatewayTransitionType,gatewayPostTransition gateway
+```
+
+### Sub-flow 6 — Duplicate Marking
+
+```mermaid
+flowchart TD
+    startDuplicate(("Start: Mark bug as duplicate"))
+
+    subgraph bug["service-bug"]
+        markDuplicate["Set duplicateOf, transition status,<br/>set resolution DUPLICATE"]
+    end
+
+    subgraph comment["service-comment"]
+        createDuplicateSystemComments["Create DUPE_OF and<br/>HAS_DUPE system comments"]
+    end
+
+    subgraph notif["service-notification"]
+        notifyDuplicate["Send duplicate<br/>notification email"]
+    end
+
+    endDuplicateMarked((("End: Bug marked duplicate")))
+
+    startDuplicate --> markDuplicate
+    markDuplicate --> createDuplicateSystemComments
+    markDuplicate --> notifyDuplicate
+    createDuplicateSystemComments --> endDuplicateMarked
+    notifyDuplicate --> endDuplicateMarked
+```
+
+### Sub-flow 7 — Dependency Addition
+
+```mermaid
+flowchart TD
+    startDependency(("Start: Add a dependency"))
+
+    subgraph bug["service-bug"]
+        addDependency["Add dependency with<br/>loop/cycle detection"]
+    end
+
+    subgraph notif["service-notification"]
+        notifyDependencyAdded["Send dependency<br/>notification"]
+    end
+
+    endDependencyAdded((("End: Dependency added")))
+
+    startDependency --> addDependency
+    addDependency --> notifyDependencyAdded
+    notifyDependencyAdded --> endDependencyAdded
+```
+
+---
+
 ## Participants
 
 | Service | Role | Responsibility in This Workflow |

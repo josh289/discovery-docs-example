@@ -6,6 +6,119 @@ The Flag Review & Approval Workflow governs the lifecycle of review and approval
 
 All flag logic — both attachment-level and bug-level — is owned by `service-attachment` per architectural decision ADR-010. The `service-notification` service subscribes to flag events to deliver email. The `service-bug` service emits events that trigger flag retargeting when bugs move between products.
 
+## Workflow Diagram (Mermaid)
+
+The workflow is split into four stages: the main happy path (request → review → grant/deny), and three compensation flows triggered by independent events.
+
+### Stage 1 — Main Happy Path (Request, Review, Decision)
+
+```mermaid
+flowchart TD
+    startEv(("User requests<br>flag review"))
+
+    subgraph attachment["service-attachment"]
+        validateType["validate-flag-type-applicability<br>Resolve available flag types via<br>inclusion/exclusion rules"]
+        gwApplicable{"Flag type applicable to<br>target product/component?"}
+        validateReq["validate-requestee<br>Validate requestee (visibility,<br>permissions, account status)"]
+        gwReqValid{"Requestee valid?"}
+        createReq["create-flag-request<br>Create flag with status '?'<br>(with requestee)"]
+        createNoReq["create-flag-no-requestee<br>Create flag with status '?'<br>(requestee dropped)"]
+        grantFlag["grant-flag<br>Grant flag — set status '+'"]
+        denyFlag["deny-flag<br>Deny flag — set status '-'"]
+    end
+
+    subgraph notification["service-notification"]
+        notifyReq["notify-requestee<br>Send review-request email<br>to requestee + CC list"]
+        notifyGranted["notify-setter-granted<br>Notify setter that flag<br>was granted"]
+        notifyDenied["notify-setter-denied<br>Notify setter that flag<br>was denied"]
+    end
+
+    waitDecision["wait-for-review-decision<br>Requestee reviews and decides<br>grant (+) or deny (-)"]
+    gwDecision{"Review decision?"}
+
+    endNotApplicable([end-not-applicable<br>Flag type not applicable])
+    endReqInvalid([end-requestee-invalid<br>Requestee cannot review])
+    endGranted([end-granted<br>Flag granted])
+    endDenied([end-denied<br>Flag denied])
+
+    startEv --> validateType
+    validateType --> gwApplicable
+    gwApplicable -->|applicable| validateReq
+    gwApplicable -->|not applicable| endNotApplicable
+    validateReq --> gwReqValid
+    gwReqValid -->|valid| createReq
+    gwReqValid -->|invalid + skip_requestee_on_error| createNoReq
+    gwReqValid -->|invalid - reject| endReqInvalid
+    createReq --> notifyReq
+    createNoReq --> notifyReq
+    notifyReq --> waitDecision
+    waitDecision --> gwDecision
+    gwDecision -->|grants +| grantFlag
+    gwDecision -->|denies -| denyFlag
+    grantFlag --> notifyGranted
+    denyFlag --> notifyDenied
+    notifyGranted --> endGranted
+    notifyDenied --> endDenied
+
+    classDef gateway fill:#fef3c7,stroke:#d97706
+    class gwApplicable,gwReqValid,gwDecision gateway
+```
+
+### Stage 2 — Compensation A: Attachment Obsoleted
+
+```mermaid
+flowchart LR
+    startObs(("Attachment marked<br>obsolete"))
+
+    subgraph attachment["service-attachment"]
+        cancelPending["cancel-pending-flags-obsolete<br>Cancel all pending '?' flags<br>on the obsoleted attachment"]
+    end
+
+    endObsCascade([end-obsolete-cascade<br>All pending flags canceled])
+
+    startObs --> cancelPending
+    cancelPending --> endObsCascade
+```
+
+### Stage 3 — Compensation B: Bug Moved Between Products
+
+```mermaid
+flowchart TD
+    startMoved(("Bug moved to different<br>product/component<br>(bug.Events.BugMoved)"))
+
+    subgraph attachment["service-attachment"]
+        retarget["retarget-flags<br>Retarget flags to new<br>product/component rules"]
+        gwRetarget{"Retargeting result?"}
+    end
+
+    endRetargeted([end-retargeted<br>Flags retargeted])
+    endRetargetRemoved([end-retarget-removed<br>Flags removed — no match])
+
+    startMoved --> retarget
+    retarget --> gwRetarget
+    gwRetarget -->|matching type found| endRetargeted
+    gwRetarget -->|no matching type| endRetargetRemoved
+
+    classDef gateway fill:#fef3c7,stroke:#d97706
+    class gwRetarget gateway
+```
+
+### Stage 4 — Compensation C: Flag Type Rules Changed
+
+```mermaid
+flowchart LR
+    startRules(("Flag type<br>inclusion/exclusion rules<br>updated by admin"))
+
+    subgraph attachment["service-attachment"]
+        forceCleanup["force-cleanup-flags<br>Remove flags no longer valid<br>under updated rules"]
+    end
+
+    endRulesCleanup([end-rules-cleanup<br>Invalid flags cleaned up])
+
+    startRules --> forceCleanup
+    forceCleanup --> endRulesCleanup
+```
+
 ## ## Participants
 
 | Service | Role | Responsibility |
