@@ -21,11 +21,12 @@ This repository is an **example deliverable** — what a modernization-audit eng
 - **[Domain Model](domain-model/README.md)** — per-service Mermaid class diagrams (7 services), cross-context FK map, 37 invariants extracted from specs.
 - **[C4 Architecture](c4/README.md)** — Context, Container, Component diagrams + 2 code-level dives (BugAggregate, AttachmentAggregate). Stability annotations from cluster inventory.
 - **[Workflows](workflows/)** — 3 BPMN workflows (bug lifecycle, flag review/approval, product creation saga) with `cite:` fields linking gateway logic to specific business rules.
+- **[Architecture Decision Records (ADRs)](adrs/README.md)** — 8 ADRs covering service boundaries, event sourcing strategy, workflow ownership, search engine choice, flag ownership, group permission split, event payload design, and user identity. Each ADR follows Status/Context/Decision/Consequences format.
 - **[User Journeys](journeys/)** — 7 end-to-end user journeys with `## Workflow & Rules Cross-References` sections mapping each step to its workflow gateway and decision rule.
 
 ## Rules and access
 
-- **[Decision Rules](decision-rules.md)** — 246 unique business rules across 7 services, categorized into state-transition / permission / validation / business-policy / notification. Includes a *Duplicates and Conflicts* section flagging cross-service overlaps and an *Unclear Intent* section flagging ambiguities for domain-expert review.
+- **[Decision Rules](decision-rules.md)** — 492 decision rules across 7 services, categorized into state-transition / permission / validation / business-policy / notification. Includes a *Duplicates and Conflicts* section flagging cross-service overlaps and an *Unclear Intent* section flagging ambiguities for domain-expert review.
 - **[Decision Rule Slices](decision-rules-slices/)** — per-service rule files (one per service spec).
 - **[Permission Matrix](permission-matrix.md)** — 131-row Role × Resource × Action matrix across all 7 services with Layer 1 permission strings + Layer 2 policy classes side-by-side. Includes effective-permissions analysis for sample roles, gaps, and modernization recommendations.
 - **[Integration Surface](integration-surface.md)** — Inbound/outbound integration inventory (SMTP, LDAP, RADIUS, Memcached, etc.), API surface, wire-format constraints customers may depend on, message and event contracts, compatibility requirements for migration.

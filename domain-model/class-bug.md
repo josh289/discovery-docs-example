@@ -123,3 +123,60 @@ classDiagram
 - `BugAggregate.assignedTo → UserAggregate` [source: output/phase-4-architecture/services/service-bug.md:61]
 - `BugAggregate.reporterId → UserAggregate` [source: output/phase-4-architecture/services/service-bug.md:62]
 - `BugAggregate.qaContact → UserAggregate` [source: output/phase-4-architecture/services/service-bug.md:63]
+
+## Bug Status State Machine
+
+The bug lifecycle is a data-driven directed graph: `BugAggregate.status` transitions are validated against the `StatusWorkflowConfig` singleton aggregate, whose `TransitionEdge` rows define the legal `(oldStatus, newStatus)` pairs. Per `BR-bug-005` (workflow validity), every transition is rejected unless an active edge exists in the workflow, and the diagram below depicts the canonical default edges shipped with Bugzilla. [source: output/phase-4-architecture/services/service-bug.md:12, decision-rules.md BR-bug-005]
+
+```mermaid
+stateDiagram-v2
+  [*] --> UNCONFIRMED : creation when product.allows_unconfirmed
+  [*] --> NEW : creation (default)
+  [*] --> ASSIGNED : creation with assignee set
+
+  state Open {
+    UNCONFIRMED : UNCONFIRMED (open, awaiting canconfirm)
+    NEW : NEW (open, ready to work)
+    ASSIGNED : ASSIGNED (open, owner set)
+    IN_PROGRESS : IN_PROGRESS (open, actively worked)
+    REOPENED : REOPENED (open, reopened after close)
+  }
+
+  state Closed {
+    RESOLVED : RESOLVED (closed, resolution required)
+    VERIFIED : VERIFIED (closed, QA-confirmed)
+    CLOSED : CLOSED (closed, terminal)
+  }
+
+  UNCONFIRMED --> NEW : confirm (BR-bug-ST-UNCONFIRMED-NEW; sets everConfirmed=true)
+  UNCONFIRMED --> ASSIGNED : assign (sets everConfirmed=true)
+  UNCONFIRMED --> RESOLVED : resolve (resolution required)
+
+  NEW --> ASSIGNED : set assignee
+  NEW --> RESOLVED : resolve
+
+  ASSIGNED --> IN_PROGRESS : start work
+  ASSIGNED --> NEW : unassign
+  ASSIGNED --> RESOLVED : resolve
+
+  IN_PROGRESS --> ASSIGNED : pause
+  IN_PROGRESS --> RESOLVED : resolve
+
+  RESOLVED --> VERIFIED : QA confirm
+  RESOLVED --> REOPENED : reopen
+  RESOLVED --> CLOSED : final close
+
+  VERIFIED --> CLOSED : final close
+  VERIFIED --> REOPENED : reopen
+
+  CLOSED --> REOPENED : reopen
+
+  REOPENED --> NEW : re-confirmed
+  REOPENED --> ASSIGNED : re-assigned
+  REOPENED --> RESOLVED : resolve
+
+  note right of RESOLVED : FIXED resolution requires NoOpenBlockersPolicy — every dependsOn target must already be in a closed status (BR-bug-008, BR-bug-POLICY-NoOpenBlockersPolicy).
+```
+
+Note: the diagram shows the *default* Bugzilla workflow as defined in `output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md#state-machines`. The workflow itself is stored in the `StatusWorkflowConfig` aggregate, so administrators with `bugs:admin_workflow` permission can add custom statuses (`AddWorkflowStatus`) and edit transition edges (`AddWorkflowTransition`, `RemoveWorkflowTransition`); any specific deployment may therefore differ from this canonical graph. The single global workflow plus per-product `allows_unconfirmed` flag is the architecture chosen in [adrs/adr-003-global-workflow-with-product-flags.md](../adrs/adr-003-global-workflow-with-product-flags.md). [source: output/phase-4-architecture/services/service-bug.md:18, output/phase-4-architecture/services/service-bug.md:120-130]
+
