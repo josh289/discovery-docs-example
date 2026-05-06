@@ -1,7 +1,7 @@
 # C4 Audit — Diagram Index
 
 ## Level 1 — System Context
-- [context.md](./context.md) — C4Context diagram: actors, the Banyan Bug Tracker system, and external dependencies (SMTP, S3/MinIO, LDAP/RADIUS, legacy Bugzilla import)
+- [context.md](./context.md) — C4Context diagram: actors, the Evergreen Bug Tracker system, and external dependencies (SMTP, S3/MinIO, LDAP/RADIUS, legacy Bugzilla import)
 
 ## Level 2 — Containers
 - [container.md](./container.md) — C4Container diagram: API gateway, seven microservices, PostgreSQL event/read-model stores, Redis, RabbitMQ, Elasticsearch, S3/MinIO, SMTP, Jaeger

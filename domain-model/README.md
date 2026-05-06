@@ -1,6 +1,6 @@
 # Domain Model — Audit Output
 
-This directory contains the domain-class audit artifacts for the Bugzilla Evergreen decomposition into seven bounded contexts.
+This directory contains the domain-class audit artifacts for the Bugzilla decomposition to the Evergreen framework into seven bounded contexts.
 
 ## Per-Service Class Diagrams (Slicer-Owned)
 

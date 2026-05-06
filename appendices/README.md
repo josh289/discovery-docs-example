@@ -1,6 +1,6 @@
 # Audit Appendices
 
-Back-matter for the Bugzilla-Evergreen audit. Each sub-file is independently readable.
+Back-matter for the Bugzilla migration audit. Each sub-file is independently readable.
 
 - [Appendix A — File Inventory](./file-inventory.md) — per-language LOC breakdown of the source codebase (61 key files, 36 800 LOC across Perl).
 - [Appendix B — Glossary](./glossary.md) — plain-English domain and platform terms (14 entries covering CQRS, Event Sourcing, Aggregates, and Bugzilla-specific concepts).
