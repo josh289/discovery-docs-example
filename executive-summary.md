@@ -1,17 +1,41 @@
 # Executive Summary
 
-We identified **7 bounded contexts** [source: audit-output/cluster-inventory.md#clusters] across a ~111 kLOC Perl monolith (Bugzilla) targeted for re-architecture as Evergreen CQRS/Event Sourcing microservices. The audit catalogued **472 decision rules** spanning validation, business-policy, state-transition, permission, and notification categories [source: audit-output/decision-rules.md#master-table]. The phased statement of work estimates **349 story-points (≈ a 3.5-month engagement at ~100 story-points/month for an experienced team)** to complete the migration, sequenced as foundation services first, then core domain, then query/notification leaves, then data-migration cutover [source: audit-output/sow.md#phased-plan]. Three previously-flagged contract surprises (event-naming inconsistencies, scheduled-report dual ownership, missing Layer 2 policy on `bugs:admin_workflow`) were reconciled on 2026-05-06; the surprises below are the next-most-load-bearing findings still resident in the architecture.
+> **Recommendation: Proceed.** Four-phase strangler-fig, 349 story-points (~3.5-month engagement at experienced-team velocity). **Risk: Medium-High** — driven primarily by the zero-test-coverage baseline (R-009) and the one-shot data migration cutover (R-010). Phases 1–3 are fully reversible; only Phase 4 step 4c (parallel-run sign-off) is irreversible. The legacy Bugzilla instance is retained read-only for 90 days post-cutover as a fallback.
 
-## Three Surprises
+## Headline numbers
 
-- **Memcached was acting as a synchronous global cache for authorization data** — Bugzilla cached status workflow, group controls, and config in memcached with manual invalidation, so a permission change took effect on the next request. Evergreen has no shared cache: every service projects its own read models from events, which means group-membership and group-control updates have an eventual-consistency window where the authoritative state and the in-service projection disagree, and during that window authorization decisions (who can see a bug, who can transition status) can be wrong. [source: audit-output/risk-register.md#hidden-behaviors]
-- **`see_also` adds a reverse link on the target bug — silently, across aggregate boundaries** — When a Bugzilla user adds a local-bug URL as a "see also" reference, the monolith automatically inserts the matching reverse row on the target bug. The `bug_see_also` table schema stores unidirectional rows, so this behaviour is invisible from the data model alone; an extraction that treats `AddSeeAlso` as a single-aggregate command will silently drop the reverse link. The same shape repeats for comment-privacy toggles (synchronously re-index the parent bug's fulltext) and for product mandatory-group flips (retroactively add every existing bug in the product to the new group as a non-transactional batch). [source: audit-output/risk-register.md#hidden-behaviors]
-- **The migration baseline is invisible — 6 of 7 services have zero tests and the entire codebase has zero git history** — `discovery/bugzilla/` was imported as a single bulk snapshot, so every file reports `(unversioned)` author and zero churn; only `service-search` has a sibling test file (`xt/search.t`). All seven clusters carry an `unknown` stability rating as a direct consequence. The migration team has no churn signal, no author signal, and no test-coverage signal to triage decomposition risk — the source code itself is the sole knowledge artifact, and the audit recommends treating `unknown` as `fragile` for risk-rating purposes. [source: audit-output/cluster-inventory.md#stability-ratings]
+| Metric | Value |
+|---|---|
+| Bounded contexts identified | 7 |
+| Source size | ~111 kLOC Perl |
+| Decision rules catalogued | 472 |
+| Active risks | 19 (1 resolved on 2026-05-06) |
+| ADRs ratified | 8 |
+| Engagement | 349 story-points (~3.5 months at ~100 pts/month) |
 
-## Recommended Path Forward
+*Sources: cluster-inventory.md, decision-rules.md, risk-register.md, adrs/, sow.md.*
 
-Follow the four-phase strangler-fig sequence from the SOW: stand up service-user and service-product first (zero inbound dependencies, 94 pts), then the core bug/comment/attachment triad (133 pts), then the search and notification leaf services (74 pts), then freeze-cut-transform-load the data migration with a REST compatibility shim preserving the legacy endpoints (48 pts) [source: audit-output/sow.md#phased-plan]. Phases 1–3 are fully reversible because no production data has been migrated; only Phase 4 step 4c (parallel-run sign-off) crosses an irreversible boundary, and the legacy Bugzilla instance is retained read-only for 90 days post-decommission as a fallback [source: audit-output/sow.md#rollback-boundaries].
+## What the audit revealed beyond scoping
 
-### Alternative Considered
+- **Authorization decisions race against eventual consistency.** Bugzilla cached group memberships, group controls, and status workflow in memcached with synchronous invalidation, so a permission change took effect on the next request. Evergreen has no shared cache: each service projects its own read models from events, opening a window between the authoritative state and the in-service projection where group-visibility and transition-permission decisions can be wrong. [source: audit-output/risk-register.md#hidden-behaviors]
 
-A big-bang rewrite of the entire monolith in a single release was rejected because it eliminates the per-phase rollback checkpoints that the strangler-fig approach preserves at every boundary [source: audit-output/sow.md#rollback-boundaries]. With all seven clusters at `unknown` stability and no test-coverage signals, a single irreversible cutover would compound the data-migration risk (R-010: non-resumable FETL with no rollback) across every service simultaneously [source: audit-output/risk-register.md#operational-risks].
+- **Hidden cross-aggregate side effects are invisible from the data model.** Adding a local-bug URL as a `see_also` reference automatically inserts the reverse row on the target bug — a behaviour the schema does not reveal (rows are unidirectional). The same shape repeats: comment privacy toggles synchronously re-index the parent bug's fulltext, and product mandatory-group flips retroactively cascade across every existing bug in the product as a non-transactional batch. An extraction that treats each command as a single-aggregate operation will silently lose these. [source: audit-output/risk-register.md#hidden-behaviors]
+
+- **The migration baseline is invisible: zero git history, 6/7 services without tests.** `discovery/bugzilla/` was imported as a single bulk snapshot, so every file reports `(unversioned)` author and zero churn. Only `service-search` has a sibling test file (`xt/search.t`); the other six services have no test signal at all. The migration team has no churn signal, no author signal, and no test-coverage signal to triage decomposition risk — the source code itself is the sole knowledge artifact. [source: audit-output/cluster-inventory.md#stability-ratings]
+
+## Recommended path forward
+
+Strangler-fig in four phases: stand up the zero-inbound-dependency foundation services (user, product) first, then the core bug/comment/attachment triad, then the search and notification leaves, then a freeze-cut-transform-load data migration behind a REST compatibility shim that preserves the legacy endpoints. The first three phases land entirely alongside the live monolith with no production data migrated, so each is independently reversible by reverting the gateway routes. Only Phase 4 step 4c (parallel-run sign-off) crosses an irreversible boundary; the legacy Bugzilla instance is held read-only for 90 days post-cutover as the rollback path of last resort.
+
+## Before Phase 1 starts (customer pre-flight)
+
+- Identify domain experts who can confirm the three hidden-coupling behaviours: `see_also` reverse-linking (R-008), mandatory-group cascade (R-006), and comment-privacy fulltext re-index (R-013) — the source code alone cannot certify these are fully captured.
+- Provision read-only access to a production-snapshot Bugzilla database for a full migration dry-run, including pre-scan for orphan version/milestone references (R-010, R-012).
+- Confirm with compliance that 90-day read-only retention of the legacy Bugzilla instance is acceptable as the cutover rollback path (sow.md rollback-boundaries).
+- Stakeholder ratification of the four event-name canonicalisations the audit applied on the design's behalf: `BugProductChanged`, `CommentTagAdded`, `EmailPreferencesUpdated`, and the target-specific `Flag*` events (R-004 — resolved).
+- Sign-off that scheduled-reports / Whine ownership now lives in `service-notification` only; the search-side duplicate has been removed (decision-rules.md duplicates-and-conflicts).
+- Confirm an acceptable secret-rotation mechanism in the Evergreen platform — Bugzilla's `localconfig` is read once at startup and has no equivalent runtime story (R-020).
+
+## Alternative considered
+
+A big-bang rewrite of the monolith in a single release was rejected: with all seven clusters at `unknown` stability and no test-coverage signal, a single irreversible cutover would compound the data-migration risk (R-010: non-resumable FETL) across every service simultaneously and eliminate the per-phase rollback checkpoints the strangler-fig preserves at every boundary. [source: audit-output/sow.md#rollback-boundaries]
