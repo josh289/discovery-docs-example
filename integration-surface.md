@@ -267,6 +267,152 @@ Several API responses return both deprecated and current field names (e.g., `sor
 
 All 45 event subscriptions from the interaction map are listed below. [source: output/phase-4-architecture/interaction-map.md:1-45]
 
+### Event-Flow Diagrams
+
+*Diagrams below visualize key flows; the full 45-event catalog is the authoritative reference table that follows.*
+
+#### Bus Topology Overview — All 7 Services
+
+Producer → RabbitMQ → consumer fan-out, with edge labels showing event-group counts (not individual events). Total subscriptions across all groups = 45 (see canonical table below).
+
+```mermaid
+flowchart LR
+    bug["service-bug"]
+    user["service-user"]
+    product["service-product"]
+    comment["service-comment"]
+    attachment["service-attachment"]
+    search["service-search"]
+    notification["service-notification"]
+    bus[("RabbitMQ Bus")]
+
+    bug -->|"bug.Events.* (17)"| bus
+    user -->|"user.Events.* (9)"| bus
+    product -->|"product.Events.* (14)"| bus
+    comment -->|"comment.Events.* (5)"| bus
+    attachment -->|"attachment.Events.* (16)"| bus
+
+    bus -->|"product.Events.* + user.Events.* + comment.Events.* + attachment.Events.* (19)"| bug
+    bus -->|"user.Events.UserDisabled (1)"| product
+    bus -->|"bug.Events.BugMarkedDuplicate + attachment.Events.Attachment* (3)"| comment
+    bus -->|"bug.Events.BugProductChanged + user.Events.GroupMember* + product.Events.* + attachment.Events.FlagType* (10)"| attachment
+    bus -->|"bug.Events.* + comment.Events.* + attachment.Events.* (24)"| notification
+    bus -->|"bug.Events.* + comment.Events.* + attachment.Events.* + product.Events.*Renamed (16)"| search
+
+    classDef producer fill:#cfe8ff,stroke:#1f6feb,color:#000;
+    classDef terminal fill:#ffe0b3,stroke:#d97706,color:#000;
+    classDef leaf fill:#e6e6e6,stroke:#666,color:#000;
+    classDef busNode fill:#fff3b0,stroke:#b58900,color:#000;
+    class bug,user,product,comment,attachment producer;
+    class notification,search terminal;
+    class bus busNode;
+```
+
+#### Bug Creation Fan-Out (E-18, E-19, E-20)
+
+`BugCreated` is published once and consumed by service-notification (email), service-search (index), and service-comment (reserve thread). Rows E-18, E-19, E-20 in the canonical table below. [source: output/phase-4-architecture/interaction-map.md:19]
+
+```mermaid
+sequenceDiagram
+    participant GW as API Gateway
+    participant Bug as service-bug
+    participant Notify as service-notification
+    participant Search as service-search
+    participant Comment as service-comment
+
+    GW->>Bug: CreateBug command
+    Bug->>Bug: CanEnterProductPolicy (projected read model)
+    Bug->>Bug: Create BugAggregate
+    Bug-->>Notify: bug.Events.BugCreated  [E-18]
+    Bug-->>Search: bug.Events.BugCreated  [E-19]
+    Bug-->>Comment: bug.Events.BugCreated  [E-20]
+    Notify->>Notify: Compute recipients → render email → SMTP
+    Search->>Search: Index bug in Elasticsearch
+```
+
+#### Bug Status Transition Cascade (E-23, E-24)
+
+`BugStatusTransitioned` and the conditional `BugResolved` / `BugReopened` variants drive the dependency-notification cascade. Rows E-23, E-24 in the canonical table below. [source: output/phase-4-architecture/interaction-map.md:84]
+
+```mermaid
+sequenceDiagram
+    participant GW as API Gateway
+    participant Bug as service-bug
+    participant Notify as service-notification
+    participant Search as service-search
+
+    GW->>Bug: TransitionBugStatus command
+    Bug->>Bug: ValidStatusTransitionPolicy (StatusWorkflowReadModel)
+    alt Resolution is FIXED
+        Bug->>Bug: NoOpenBlockersPolicy (BugDependencyReadModel)
+    end
+    Bug->>Bug: Apply transition to BugAggregate
+    alt Transition to closed status
+        Bug-->>Notify: bug.Events.BugResolved {affectedDependentBugIds, dependentBugSnapshots}
+        Notify->>Notify: dep_only cascade to dependent bug stakeholders
+    else Transition to open status
+        Bug-->>Notify: bug.Events.BugReopened
+    end
+    Bug-->>Notify: bug.Events.BugStatusTransitioned  [E-23]
+    Bug-->>Search: bug.Events.BugStatusTransitioned  [E-24]
+```
+
+#### Comment Created Fan-Out (E-36, E-37)
+
+`CommentCreated` projects `workTime` into `BugTimeTrackingReadModel` on service-bug, and triggers email on service-notification. Rows E-36, E-37 in the canonical table below. [source: output/phase-4-architecture/interaction-map.md:41]
+
+```mermaid
+sequenceDiagram
+    participant GW as API Gateway
+    participant Comment as service-comment
+    participant Bug as service-bug
+    participant Notify as service-notification
+    participant Search as service-search
+
+    GW->>Comment: CreateComment command
+    Comment->>Comment: CanCommentOnBugPolicy
+    Comment->>Comment: IsInsiderPolicy (if private)
+    Comment->>Comment: Create CommentAggregate
+    Comment-->>Bug: comment.Events.CommentCreated {workTime?}  [E-36 — BugFulltext + time-tracking projection]
+    Comment-->>Notify: comment.Events.CommentCreated  [E-37]
+    Comment-->>Search: comment.Events.CommentCreated
+    Bug->>Bug: Project workTime into BugTimeTrackingReadModel
+    Bug->>Bug: Project body into BugFulltextReadModel
+    Notify->>Notify: Compute recipients → render email → SMTP
+```
+
+#### Flag Review & Approval Workflow (E-42, E-43, E-44)
+
+Two-phase flag workflow: setter requests review (`?`), reviewer grants (`+`) or denies (`-`). Each transition emits a distinct event consumed by service-notification. Rows E-42, E-43, E-44 in the canonical table below. [source: output/phase-4-architecture/interaction-map.md:153]
+
+```mermaid
+sequenceDiagram
+    participant Setter as Setter (User)
+    participant GW as API Gateway
+    participant Attach as service-attachment
+    participant Notify as service-notification
+    participant Reviewer as Reviewer (User)
+
+    Setter->>GW: SetAttachmentFlag(status='?', requesteeId)
+    GW->>Attach: SetAttachmentFlag command
+    Attach->>Attach: CanSetFlagPolicy (request group check)
+    Attach->>Attach: FlagTypeApplicabilityPolicy (inclusion/exclusion)
+    Attach->>Attach: RequesteeVisibilityPolicy
+    Attach-->>Notify: attachment.Events.AttachmentFlagRequested  [E-42]
+    Notify->>Reviewer: Email: "Please review"
+
+    Reviewer->>GW: SetAttachmentFlag(status='+' or '-')
+    GW->>Attach: SetAttachmentFlag command
+    Attach->>Attach: CanSetFlagPolicy (grant group check)
+    alt Granted
+        Attach-->>Notify: attachment.Events.AttachmentFlagGranted  [E-43]
+        Notify->>Setter: Email: "Flag granted (+)"
+    else Denied
+        Attach-->>Notify: attachment.Events.AttachmentFlagDenied  [E-44]
+        Notify->>Setter: Email: "Flag denied (-)"
+    end
+```
+
 | # | Event | Producer | Payload Fields | Consumers | Notes |
 |---|-------|----------|----------------|-----------|-------|
 | E-01 | `user.Events.GroupMemberAdded` | service-user | `groupId`, `userId` | service-bug | Updates UserGroupMembershipReadModel for auth policies |

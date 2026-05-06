@@ -328,6 +328,111 @@ C4Component
 | `BugFlagDeniedSub` | Event Subscription | unknown | `attachment.Events.BugFlagDenied` | Updates BugFlagListReadModel | [source: output/phase-4-architecture/interaction-map.md:366] |
 | `BugFlagClearedSub` | Event Subscription | unknown | `attachment.Events.BugFlagCleared` | Updates BugFlagListReadModel | [source: output/phase-4-architecture/interaction-map.md:367] |
 
+### Event Subscription Fan-In Diagram
+
+The diagram below visualizes service-bug's role as a downstream consumer: 19 event-subscription handlers fan in from 4 producer services via RabbitMQ, and each handler projects into a local read-model used for cross-service validation and authorization. [source: output/phase-4-architecture/services/service-bug.md:553-606]
+
+```mermaid
+flowchart LR
+    classDef producer fill:#cfe8ff,stroke:#1f77b4,color:#0b3d66
+    classDef bus fill:#e6e6e6,stroke:#666,color:#222
+    classDef handler fill:#fff5b3,stroke:#b58900,color:#5a4500
+    classDef readmodel fill:#cdebc5,stroke:#2e7d32,color:#1b3d1b
+
+    sp["service-product"]:::producer
+    su["service-user"]:::producer
+    sc["service-comment"]:::producer
+    sa["service-attachment"]:::producer
+
+    bus["RabbitMQ"]:::bus
+
+    sp --> bus
+    su --> bus
+    sc --> bus
+    sa --> bus
+
+    subgraph from_product["from service-product"]
+        pch["ProductCreatedHandler"]:::handler
+        puh["ProductUpdatedHandler"]:::handler
+        pdh["ProductDeactivatedHandler"]:::handler
+        cch["ComponentCreatedHandler"]:::handler
+        cuh["ComponentUpdatedHandler"]:::handler
+        vch["VersionCreatedHandler"]:::handler
+        vrh["VersionRenamedHandler"]:::handler
+        mch["MilestoneCreatedHandler"]:::handler
+        mrh["MilestoneRenamedHandler"]:::handler
+        gcuh["GroupControlsUpdatedHandler"]:::handler
+    end
+
+    subgraph from_user["from service-user"]
+        uch["UserCreatedHandler"]:::handler
+        udh["UserDisabledHandler"]:::handler
+        gmah["GroupMemberAddedHandler"]:::handler
+        gmrh["GroupMemberRemovedHandler"]:::handler
+    end
+
+    subgraph from_comment["from service-comment"]
+        cmch["CommentCreatedHandler"]:::handler
+    end
+
+    subgraph from_attachment["from service-attachment"]
+        bfrs["BugFlagRequestedSub"]:::handler
+        bfgs["BugFlagGrantedSub"]:::handler
+        bfds["BugFlagDeniedSub"]:::handler
+        bfcs["BugFlagClearedSub"]:::handler
+    end
+
+    bus --> pch
+    bus --> puh
+    bus --> pdh
+    bus --> cch
+    bus --> cuh
+    bus --> vch
+    bus --> vrh
+    bus --> mch
+    bus --> mrh
+    bus --> gcuh
+    bus --> uch
+    bus --> udh
+    bus --> gmah
+    bus --> gmrh
+    bus --> cmch
+    bus --> bfrs
+    bus --> bfgs
+    bus --> bfds
+    bus --> bfcs
+
+    rmProd["ProductSummaryReadModel"]:::readmodel
+    rmComp["ComponentSummaryReadModel"]:::readmodel
+    rmVer["VersionSummaryReadModel"]:::readmodel
+    rmMile["MilestoneSummaryReadModel"]:::readmodel
+    rmPgc["ProductGroupControlsReadModel"]:::readmodel
+    rmUser["UserSummaryReadModel"]:::readmodel
+    rmGm["GroupMembershipReadModel"]:::readmodel
+    rmTime["BugTimeTrackingReadModel"]:::readmodel
+    rmFlag["BugFlagListReadModel"]:::readmodel
+
+    pch --> rmProd
+    puh --> rmProd
+    pdh --> rmProd
+    cch --> rmComp
+    cuh --> rmComp
+    vch --> rmVer
+    vrh --> rmVer
+    mch --> rmMile
+    mrh --> rmMile
+    gcuh --> rmPgc
+    uch --> rmUser
+    udh --> rmUser
+    gmah --> rmGm
+    gmrh --> rmGm
+    cmch --> rmTime
+    bfrs --> rmFlag
+    bfgs --> rmFlag
+    bfds --> rmFlag
+    bfcs --> rmFlag
+```
+
 ### Layer-2 Policy Classes
 
 | Component | Type | Stability | Applied To | Rule | Source |

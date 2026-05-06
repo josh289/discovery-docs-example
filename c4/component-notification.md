@@ -83,6 +83,103 @@ C4Component
     Rel(sub_watcher_sync, watcher_rm, "writes")
 ```
 
+## Event Subscription Fan-In Diagram
+
+service-notification is the system's terminal event consumer: it sinks 19 distinct domain events from four upstream services and emits zero outbound events. The diagram below shows this fan-in topology grouped by producer service, with every inbound event ultimately funneling into a single email rendering and SMTP delivery pipeline. [source: output/phase-4-architecture/interaction-map.md:398-426]
+
+```mermaid
+flowchart LR
+    classDef producer fill:#dbeafe,stroke:#1d4ed8,color:#0b1f4d,stroke-width:1px
+    classDef bus fill:#fef3c7,stroke:#b45309,color:#3a1d00,stroke-width:1px
+    classDef event fill:#ede9fe,stroke:#6d28d9,color:#1f1147,stroke-width:1px
+    classDef terminal fill:#dcfce7,stroke:#15803d,color:#052e16,stroke-width:2px
+
+    sb["service-bug"]:::producer
+    sc["service-comment"]:::producer
+    sa["service-attachment"]:::producer
+    su["service-user"]:::producer
+
+    mq(["RabbitMQ event bus"]):::bus
+
+    sb --> mq
+    sc --> mq
+    sa --> mq
+    su --> mq
+
+    subgraph from_bug["from service-bug"]
+        bc["BugCreated (E-18)"]:::event
+        bu["BugUpdated (E-21)"]:::event
+        bst["BugStatusTransitioned (E-23)"]:::event
+        brc["BugResolutionChanged (E-25)"]:::event
+        bas["BugAssigned (E-26)"]:::event
+        bmd["BugMarkedDuplicate (E-27)"]:::event
+        bda["BugDependencyAdded (E-29)"]:::event
+        bdr["BugDependencyRemoved (E-30)"]:::event
+        cca["CcAdded (E-31)"]:::event
+        ccr["CcRemoved (E-32)"]:::event
+        btt["BugTimetrackingUpdated (E-35)"]:::event
+    end
+
+    subgraph from_comment["from service-comment"]
+        cmc["CommentCreated (E-37)"]:::event
+    end
+
+    subgraph from_attachment["from service-attachment"]
+        ac["AttachmentCreated (E-41)"]:::event
+        fs["FlagSet (E-42)"]:::event
+        fg["FlagGranted (E-43)"]:::event
+        fd["FlagDenied (E-44)"]:::event
+    end
+
+    subgraph from_user["from service-user"]
+        upc["UserPreferencesChanged (E-04)"]:::event
+        gma["GroupMemberAdded (E-05)"]:::event
+        gmr["GroupMemberRemoved (E-06)"]:::event
+    end
+
+    mq --> bc
+    mq --> bu
+    mq --> bst
+    mq --> brc
+    mq --> bas
+    mq --> bmd
+    mq --> bda
+    mq --> bdr
+    mq --> cca
+    mq --> ccr
+    mq --> btt
+    mq --> cmc
+    mq --> ac
+    mq --> fs
+    mq --> fg
+    mq --> fd
+    mq --> upc
+    mq --> gma
+    mq --> gmr
+
+    EmailRendering[/"Email Rendering Pipeline → SMTP"\]:::terminal
+
+    bc --> EmailRendering
+    bu --> EmailRendering
+    bst --> EmailRendering
+    brc --> EmailRendering
+    bas --> EmailRendering
+    bmd --> EmailRendering
+    bda --> EmailRendering
+    bdr --> EmailRendering
+    cca --> EmailRendering
+    ccr --> EmailRendering
+    btt --> EmailRendering
+    cmc --> EmailRendering
+    ac --> EmailRendering
+    fs --> EmailRendering
+    fg --> EmailRendering
+    fd --> EmailRendering
+    upc --> EmailRendering
+    gma --> EmailRendering
+    gmr --> EmailRendering
+```
+
 ## Components Table
 
 | Component | Type | Stability | Source |
