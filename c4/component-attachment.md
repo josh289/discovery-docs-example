@@ -1,6 +1,6 @@
 # C4 Level 3 — Component: service-attachment
 
-> **Service**: `attachment` · **Package**: `@banyanai/service-attachment` · **Contracts**: `@banyanai/service-attachment-contracts`
+> **Service**: `attachment` · **Package**: `@evergreen/service-attachment` · **Contracts**: `@evergreen/service-attachment-contracts`
 >
 > Per ADR-005, service-attachment owns **all flag logic** (both bug-level and attachment-level) in addition to the attachment file lifecycle. Binary content is stored in external object storage (S3/MinIO); only metadata is event-sourced.
 

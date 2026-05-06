@@ -2,7 +2,7 @@
 
 ## Workflow Overview
 
-The Product Creation Saga orchestrates the multi-step process of creating a new product in the Bugzilla-to-Banyan migration. In the original Bugzilla monolith, `Product->create()` performs all steps within a single database transaction: inserting the product row, auto-creating the first version, auto-creating the default milestone, optionally creating a bug group and charting series, and firing extension hooks. In the Banyan CQRS/Event Sourcing architecture, these steps are decomposed into a saga (process manager) that issues commands across three services — `service-product`, `service-user`, and `service-search` — tolerating eventual consistency and providing compensation logic for partial failures.
+The Product Creation Saga orchestrates the multi-step process of creating a new product in the Bugzilla-to-Evergreen migration. In the original Bugzilla monolith, `Product->create()` performs all steps within a single database transaction: inserting the product row, auto-creating the first version, auto-creating the default milestone, optionally creating a bug group and charting series, and firing extension hooks. In the Evergreen CQRS/Event Sourcing architecture, these steps are decomposed into a saga (process manager) that issues commands across three services — `service-product`, `service-user`, and `service-search` — tolerating eventual consistency and providing compensation logic for partial failures.
 
 The saga is triggered by an admin action and proceeds through three mandatory steps (product, version, milestone) and up to three optional steps (bug group, group control map, charting series). The `ProductCreated` event is emitted when the product aggregate is first saved; downstream services receive it along with subsequent `VersionCreated` and `MilestoneCreated` events via the RabbitMQ message bus. By the time a user navigates to the product in the UI, all projections are consistent.
 
@@ -69,7 +69,7 @@ A product must have at least one version — this invariant is enforced by the s
 
 The saga issues a `CreateMilestone` command for the product with the value matching `product.defaultMilestone`. The MilestoneAggregate is created and emits `MilestoneCreated`. Like versions, a product must have at least one milestone.
 
-In the original Bugzilla, the `defaultmilestone` column on the `products` table stores the **milestone value string**, not the milestone ID. In Banyan (per ADR-013), this is changed to an ID-based reference — the product aggregate stores `defaultMilestoneId`, and the read model resolves it to the milestone name.
+In the original Bugzilla, the `defaultmilestone` column on the `products` table stores the **milestone value string**, not the milestone ID. In Evergreen (per ADR-013), this is changed to an ID-based reference — the product aggregate stores `defaultMilestoneId`, and the read model resolves it to the milestone name.
 
 **Failure**: If milestone creation fails, the saga compensates by deactivating the product (and implicitly marking the created version as part of an inactive product).
 
@@ -105,13 +105,13 @@ If charting is enabled, the saga issues a `CreateChartingSeries` command to `ser
 
 After all mandatory and optional steps complete, the saga performs post-creation finalization:
 
-1. **Clear configuration caches** — memcached config cache in the original Bugzilla; in Banyan, this maps to invalidating read model caches for product lists and user-product access.
+1. **Clear configuration caches** — memcached config cache in the original Bugzilla; in Evergreen, this maps to invalidating read model caches for product lists and user-product access.
 2. **Clear user-product caches** — ensure all users see the new product in their available products list.
-3. **Fire extension hooks** — the Bugzilla `product_end_of_create` hook maps to Banyan event subscriptions. Any registered subscription handlers in `service-product` are invoked.
+3. **Fire extension hooks** — the Bugzilla `product_end_of_create` hook maps to Evergreen event subscriptions. Any registered subscription handlers in `service-product` are invoked.
 
 The product is now fully created and available for bug filing.
 
-> **Timing note**: The `ProductCreated` event was emitted at Step 1 when the aggregate was first saved. Downstream consumers (service-bug) receive it via RabbitMQ subscription and begin initializing projections. The `VersionCreated` and `MilestoneCreated` events follow in rapid succession. Due to eventual consistency, all three events are typically processed within seconds. The Banyan platform's `waitForProjection` semantics ensure that any read-model query after saga completion reflects the complete state.
+> **Timing note**: The `ProductCreated` event was emitted at Step 1 when the aggregate was first saved. Downstream consumers (service-bug) receive it via RabbitMQ subscription and begin initializing projections. The `VersionCreated` and `MilestoneCreated` events follow in rapid succession. Due to eventual consistency, all three events are typically processed within seconds. The Evergreen platform's `waitForProjection` semantics ensure that any read-model query after saga completion reflects the complete state.
 
 ## Event Flow
 
@@ -155,7 +155,7 @@ service-product                    service-user                  service-search
 
 ### Cross-service subscription model
 
-In Banyan, cross-service handoff happens exclusively through **event subscriptions** (`@EventHandlerDecorator`):
+In Evergreen, cross-service handoff happens exclusively through **event subscriptions** (`@EventHandlerDecorator`):
 
 - `service-bug` subscribes to `product.Events.*` and `user.Events.GroupCreated` to maintain its own read models
 - `service-product` subscribes to `user.Events.GroupCreated` as part of the saga continuation (the saga process manager reacts to the event)
@@ -256,7 +256,7 @@ All commands in the saga **must be idempotent** to support retry semantics:
 ### FM-6: ProductCreated Event Lost in Transit
 - **Trigger**: The `ProductCreated` event is published to RabbitMQ but not consumed by `service-bug` due to bus issues, subscription handler crash, or consumer lag.
 - **Detection**: `service-bug`'s product field read model does not include the new product.
-- **Recovery**: Banyan's event bus guarantees **at-least-once delivery**. If the subscription handler is offline, events are queued and delivered when it reconnects. Read models eventually catch up. No manual intervention needed.
+- **Recovery**: Evergreen's event bus guarantees **at-least-once delivery**. If the subscription handler is offline, events are queued and delivered when it reconnects. Read models eventually catch up. No manual intervention needed.
 - **User impact**: Brief window (< 2 seconds under normal load) where the product doesn't appear in bug-filing dropdowns.
 
 ### FM-7: Concurrent Product Creation Race
@@ -322,11 +322,11 @@ These invariants cannot be enforced within a single aggregate boundary (Product 
 
 ### Cross-service event ordering
 
-Banyan's RabbitMQ message bus delivers events in the order they are published **per aggregate stream**. However, cross-aggregate and cross-service ordering is not guaranteed. This means:
+Evergreen's RabbitMQ message bus delivers events in the order they are published **per aggregate stream**. However, cross-aggregate and cross-service ordering is not guaranteed. This means:
 
 - `ProductCreated` may arrive at service-bug before or after `VersionCreated` — the subscription handlers must tolerate out-of-order delivery.
 - Read models must be designed for **incremental projection** — each event adds information without assuming prior events have been processed.
-- The `waitForProjection` helper in Banyan polls the read model until a specific condition is met, abstracting away ordering concerns.
+- The `waitForProjection` helper in Evergreen polls the read model until a specific condition is met, abstracting away ordering concerns.
 
 ## Decision Rules Referenced
 

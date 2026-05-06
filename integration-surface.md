@@ -90,7 +90,7 @@
 
 ### PostgreSQL / MySQL Database
 
-- **Purpose**: Primary data store for all Bugzilla data. In the Banyan migration, this becomes event store + read-side stores per service. [source: output/phase-2-exploration/exploration.md:17]
+- **Purpose**: Primary data store for all Bugzilla data. In the Evergreen migration, this becomes event store + read-side stores per service. [source: output/phase-2-exploration/exploration.md:17]
 - **Wire format**: SQL over DBI/DBD connection. `DBIx::Connector` with lazy `dbh` handle. Multi-DB support (MySQL, PostgreSQL, Oracle, SQLite). [source: discovery/bugzilla/Bugzilla/DB.pm:17] [source: output/phase-2-exploration/exploration.md:208]
 - **Failure mode**: Synchronous block — all operations fail if database is unavailable. Manual transactions (`bz_start_transaction` / `bz_commit_transaction`).
 - **Retry / backoff policy**: None in application code — relies on DB connector reconnection.
@@ -118,7 +118,7 @@
 
 REST resources defined in `discovery/bugzilla/Bugzilla/WebService/Server/REST/Resources/`. Method + path + underlying WebService method:
 
-| Method | Path | Service (Banyan) | WebService Method | Auth |
+| Method | Path | Service (Evergreen) | WebService Method | Auth |
 |--------|------|---------|---------------|------|
 | GET | `/rest/bug` | service-bug | `Bug.search` | Cookie/API key/Basic |
 | POST | `/rest/bug` | service-bug | `Bug.create` | Cookie/API key/Basic |
@@ -185,7 +185,7 @@ N/A — no WebSocket surface in current architecture. Bugzilla's real-time updat
 
 Both XMLRPC and JSONRPC expose the same 31 write operations and 24 read operations across 9 resource namespaces as the REST API. They share implementation modules under `Bugzilla::WebService::*`. Key method namespaces:
 
-| XMLRPC/JSONRPC Method Namespace | WebService Module | Banyan Service Target |
+| XMLRPC/JSONRPC Method Namespace | WebService Module | Evergreen Service Target |
 |----------------------------------|-------------------|----------------------|
 | `Bug.*` (get, create, update, search, add_comment, history, attachments, fields, etc.) | `Bugzilla::WebService::Bug` | service-bug, service-comment, service-attachment |
 | `User.*` (get, create, update, login, logout) | `Bugzilla::WebService::User` | service-user |
@@ -207,7 +207,7 @@ XMLRPC error format: `{ faultCode: <int>, faultString: <string> }`. JSONRPC erro
 
 ### Field Names: snake_case Legacy IDs
 
-The legacy API uses `snake_case` field names (`bug_id`, `creation_time`, `is_open`, `last_change_time`, `qa_contact`, `assigned_to`) and **integer** IDs. The Banyan migration uses `camelCase` (`bugId`, `createdAt`, `isOpen`) and **UUID string** IDs. Any REST compatibility layer must map between these conventions. [source: discovery/bugzilla/Bugzilla/WebService/Bug.pm:371-372] [source: discovery/bugzilla/Bugzilla/WebService/Bug.pm:698] [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md — Command inputs use `bugId` (string UUID)]
+The legacy API uses `snake_case` field names (`bug_id`, `creation_time`, `is_open`, `last_change_time`, `qa_contact`, `assigned_to`) and **integer** IDs. The Evergreen migration uses `camelCase` (`bugId`, `createdAt`, `isOpen`) and **UUID string** IDs. Any REST compatibility layer must map between these conventions. [source: discovery/bugzilla/Bugzilla/WebService/Bug.pm:371-372] [source: discovery/bugzilla/Bugzilla/WebService/Bug.pm:698] [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md — Command inputs use `bugId` (string UUID)]
 
 ### Field Types: Integers vs Strings for IDs
 
@@ -263,7 +263,7 @@ Several API responses return both deprecated and current field names (e.g., `sor
 
 ## Message and Event Contracts
 
-> **INTERNAL vs EXTERNAL distinction**: The events below are *internal* contracts between Banyan microservices, propagated over the RabbitMQ message bus. They are NOT customer-facing — they MAY be reshaped during migration as long as all consumers update in lockstep. This contrasts with the REST/XMLRPC/JSONRPC API surface above, which CANNOT be reshaped without an explicit versioning strategy and consumer migration plan.
+> **INTERNAL vs EXTERNAL distinction**: The events below are *internal* contracts between Evergreen microservices, propagated over the RabbitMQ message bus. They are NOT customer-facing — they MAY be reshaped during migration as long as all consumers update in lockstep. This contrasts with the REST/XMLRPC/JSONRPC API surface above, which CANNOT be reshaped without an explicit versioning strategy and consumer migration plan.
 
 All 45 event subscriptions from the interaction map are listed below. [source: output/phase-4-architecture/interaction-map.md:1-45]
 
@@ -336,7 +336,7 @@ All 45 event subscriptions from the interaction map are listed below. [source: o
 
 - **Why**: Browser users, CI pipelines, downstream automation scripts, third-party integrations (e.g., bmo.mozilla.org, Eclipse Mylyn, custom scripts). The REST API is the primary programmatic interface. [source: output/phase-2-exploration/exploration.md:263-267]
 - **Compatibility scope**: Wire format (field names, types, error envelope, pagination shape, date encoding), semantics (bug lifecycle, permission model).
-- **Suggested versioning strategy**: URL-prefixed (`/api/v1/...`) for the Banyan-native API, with a compatibility shim at `/rest/...` that maps legacy field names to new camelCase/UUID conventions. Parallel-deployment option: run legacy Bugzilla behind `/rest/` and new Banyan behind `/api/v1/` with shared database during migration.
+- **Suggested versioning strategy**: URL-prefixed (`/api/v1/...`) for the Evergreen-native API, with a compatibility shim at `/rest/...` that maps legacy field names to new camelCase/UUID conventions. Parallel-deployment option: run legacy Bugzilla behind `/rest/` and new Evergreen behind `/api/v1/` with shared database during migration.
 - **Risk if broken**: All existing scripts and CI integrations return 404 or malformed responses. bmo-style installations lose all automation.
 
 ### 2. XMLRPC API
@@ -357,7 +357,7 @@ All 45 event subscriptions from the interaction map are listed below. [source: o
 
 - **Why**: Email is the primary notification mechanism for most Bugzilla installations. All stakeholders (reporters, assignees, QA, CC, watchers) depend on email for bug updates. [source: output/phase-2-exploration/exploration.md:227] [source: discovery/bugzilla/Bugzilla/Mailer.pm:27-189]
 - **Compatibility scope**: Email envelope (From, To, Reply-To), subject-line format, body template with field-change diffs, MIME encoding, threading headers (`In-Reply-To`, `References`).
-- **Suggested versioning strategy**: Must preserve wire compatibility. Maintain same email template structure and headers. Internal migration from TheSchwartz to Banyan event-driven notification service should be transparent to recipients.
+- **Suggested versioning strategy**: Must preserve wire compatibility. Maintain same email template structure and headers. Internal migration from TheSchwartz to Evergreen event-driven notification service should be transparent to recipients.
 - **Risk if broken**: Users miss critical bug updates, leading to communication breakdown in development teams.
 
 ### 5. LDAP Authentication Bind
@@ -383,7 +383,7 @@ All 45 event subscriptions from the interaction map are listed below. [source: o
 
 ### 8. Cross-Service Event Contracts (Internal)
 
-- **Why**: Internal coordination between Banyan microservices. Not customer-facing. [source: output/phase-4-architecture/interaction-map.md:1-45]
+- **Why**: Internal coordination between Evergreen microservices. Not customer-facing. [source: output/phase-4-architecture/interaction-map.md:1-45]
 - **Compatibility scope**: Event names and payload shapes between services.
 - **Suggested versioning strategy**: May be freely redesigned during migration as long as all consumers update in lockstep. No external versioning needed. Use schema registry for internal coordination.
 - **Risk if broken**: Internal inconsistency (stale read models, missed notifications) but no external customer impact if fixed before deployment.
@@ -392,7 +392,7 @@ All 45 event subscriptions from the interaction map are listed below. [source: o
 
 - **Why**: Existing users must be able to log in after migration without password resets. Bugzilla uses SHA-256 with salt (`bz_crypt`). [source: output/phase-2-exploration/exploration.md:266]
 - **Compatibility scope**: Password verification algorithm must accept existing hashes.
-- **Suggested versioning strategy**: Implement compatible verifier in Banyan auth service with automatic algorithm upgrade on next successful login. Migrate hash format transparently.
+- **Suggested versioning strategy**: Implement compatible verifier in Evergreen auth service with automatic algorithm upgrade on next successful login. Migrate hash format transparently.
 - **Risk if broken**: All existing users forced to reset passwords — significant operational burden and user frustration.
 
 ### Preserve vs. Redesign Matrix

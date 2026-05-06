@@ -1,7 +1,7 @@
 # C4 Level 3 — Component: service-bug
 
 > Component diagram for **service-bug**, the central domain aggregate in the
-> Bugzilla-to-Banyan migration. It owns the Bug aggregate root (event-sourced
+> Bugzilla-to-Evergreen migration. It owns the Bug aggregate root (event-sourced
 > lifecycle) and the StatusWorkflowConfig configuration aggregate (data-driven
 > state machine). Service-bug is the largest bounded context: 19 bug commands,
 > 7 workflow admin commands, 11 queries, 9 read models, 8 subscription-maintained

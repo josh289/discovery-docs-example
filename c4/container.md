@@ -4,22 +4,22 @@
 
 ```mermaid
 C4Container
-    title Container Diagram — Banyan Bug Tracker
+    title Container Diagram — Evergreen Bug Tracker
 
     Person(reporter, "Bug Reporter", "Files bugs, comments, attachments, searches")
     Person(triager, "Triager / Maintainer", "Resolves, assigns, reviews flags")
     Person(admin, "System Admin", "Manages users, groups, products, flag types")
 
-    Container_Boundary(banyan, "Banyan Bug Tracker") {
+    Container_Boundary(banyan, "Evergreen Bug Tracker") {
 
         Container(gw, "API Gateway", "Node.js / Express", "Layer-1 permission check from @Command decorators; routes HTTPS requests to owning service")
-        Container(svc_bug, "service-bug", "TypeScript / Banyan CQRS", "Bug lifecycle, status workflow, dependencies, duplicate marking, product change propagation; broadcasts BugCreated/BugUpdated/BugStatusTransitioned/BugResolved/BugMarkedDuplicate/BugProductChanged")
-        Container(svc_user, "service-user", "TypeScript / Banyan CQRS", "User identity, group membership, API keys, multi-method auth; pure upstream producer — broadcasts UserCreated/GroupMemberAdded/UserDisabled")
-        Container(svc_product, "service-product", "TypeScript / Banyan CQRS", "Classification/Product/Component/Version/Milestone hierarchy, group controls; broadcasts ProductCreated/GroupControlsUpdated")
-        Container(svc_comment, "service-comment", "TypeScript / Banyan CQRS", "Append-only comments, privacy, tags, system comments (DUPE_OF, HAS_DUPE, ATTACHMENT_CREATED); broadcasts CommentCreated")
-        Container(svc_attachment, "service-attachment", "TypeScript / Banyan CQRS", "File attachments + all flag logic (bug-level and attachment-level per ADR-005); broadcasts AttachmentCreated/AttachmentFlagRequested/BugFlagRequested")
-        Container(svc_search, "service-search", "TypeScript / Banyan CQRS + ES", "Elasticsearch-based search, boolean chart AST, saved searches, charts; leaf service — no outbound events")
-        Container(svc_notification, "service-notification", "TypeScript / Banyan CQRS", "Email rendering pipeline, recipient computation, Whine scheduled reports; terminal consumer — no outbound events")
+        Container(svc_bug, "service-bug", "TypeScript / Evergreen CQRS", "Bug lifecycle, status workflow, dependencies, duplicate marking, product change propagation; broadcasts BugCreated/BugUpdated/BugStatusTransitioned/BugResolved/BugMarkedDuplicate/BugProductChanged")
+        Container(svc_user, "service-user", "TypeScript / Evergreen CQRS", "User identity, group membership, API keys, multi-method auth; pure upstream producer — broadcasts UserCreated/GroupMemberAdded/UserDisabled")
+        Container(svc_product, "service-product", "TypeScript / Evergreen CQRS", "Classification/Product/Component/Version/Milestone hierarchy, group controls; broadcasts ProductCreated/GroupControlsUpdated")
+        Container(svc_comment, "service-comment", "TypeScript / Evergreen CQRS", "Append-only comments, privacy, tags, system comments (DUPE_OF, HAS_DUPE, ATTACHMENT_CREATED); broadcasts CommentCreated")
+        Container(svc_attachment, "service-attachment", "TypeScript / Evergreen CQRS", "File attachments + all flag logic (bug-level and attachment-level per ADR-005); broadcasts AttachmentCreated/AttachmentFlagRequested/BugFlagRequested")
+        Container(svc_search, "service-search", "TypeScript / Evergreen CQRS + ES", "Elasticsearch-based search, boolean chart AST, saved searches, charts; leaf service — no outbound events")
+        Container(svc_notification, "service-notification", "TypeScript / Evergreen CQRS", "Email rendering pipeline, recipient computation, Whine scheduled reports; terminal consumer — no outbound events")
 
         ContainerDb(pg_event, "PostgreSQL Event Store", "PostgreSQL", "Event-sourced aggregate streams for all services")
         ContainerDb(pg_read, "PostgreSQL Read Models", "PostgreSQL", "Projected read models (rm_*) for queries")

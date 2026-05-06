@@ -4,13 +4,13 @@
 
 ```mermaid
 C4Context
-    title System Context — Banyan Bug Tracker (Bugzilla Migration)
+    title System Context — Evergreen Bug Tracker (Bugzilla Migration)
 
     Person(reporter, "Bug Reporter", "Files bugs, adds comments, attaches files, searches")
     Person(triager, "Triager / Maintainer", "Resolves, assigns, sets status, reviews flags")
     Person(admin, "System Admin", "Manages users, groups, products, flag types, scheduled reports")
 
-    System(banyan, "Banyan Bug Tracker", "Seven CQRS/Event Sourcing microservices migrated from Bugzilla Perl monolith")
+    System(banyan, "Evergreen Bug Tracker", "Seven CQRS/Event Sourcing microservices migrated from Bugzilla Perl monolith")
 
     System_Ext(smtp, "SMTP Server", "Outbound email delivery for notifications and Whine scheduled reports")
     System_Ext(s3, "Object Storage (S3/MinIO)", "Binary attachment storage; only metadata is event-sourced")

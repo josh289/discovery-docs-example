@@ -1,7 +1,7 @@
 # C4 Level 3 — Component Diagram: service-search
 
-> **Service**: `service-search` (`@banyanai/service-search`)
-> **Contracts**: `@banyanai/service-search-contracts`
+> **Service**: `service-search` (`@evergreen/service-search`)
+> **Contracts**: `@evergreen/service-search-contracts`
 > **Stability**: `unknown` — no git churn, no sibling test coverage; greenfield service built from Phase-4 architecture docs.
 
 > `service-search` is a **pure query/projection service** that owns the Elasticsearch-based search engine for bugs, saved search CRUD, quicksearch parsing, boolean chart query translation, and reporting/chart aggregations. It is a **leaf service** (Level 3 in dependency topology) and a **Conformist** to `service-bug`, `service-product`, `service-comment`, and `service-attachment`. [source: output/phase-4-architecture/services/service-search.md:10] [source: output/phase-4-architecture/services/service-search.md:599]
@@ -151,7 +151,7 @@ C4Component
 
 | # | Citation | Fact |
 |---|----------|------|
-| 1 | [source: output/phase-4-architecture/services/service-search.md:5] | Service name: `service-search`, packages `@banyanai/service-search-contracts` / `@banyanai/service-search` |
+| 1 | [source: output/phase-4-architecture/services/service-search.md:5] | Service name: `service-search`, packages `@evergreen/service-search-contracts` / `@evergreen/service-search` |
 | 2 | [source: output/phase-4-architecture/services/service-search.md:10] | Pure query/projection service; consumes events from bug, product, comment, attachment for Elasticsearch index |
 | 3 | [source: output/phase-4-architecture/services/service-search.md:24] | `SavedSearchAggregate` CRUD-mode, not event-sourced per Q16 |
 | 4 | [source: output/phase-4-architecture/services/service-search.md:34] | `ScheduledReportAggregate` event-sourced for Whine scheduled reports |

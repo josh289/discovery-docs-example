@@ -1,7 +1,7 @@
 # C4 Level 3 — Component: service-user
 
 > **Source**: Materialized service-doc at `output/phase-4-architecture/services/service-user.md`.
-> Service-user owns the User Accounts & Authentication bounded context. It is a **pure upstream producer** with no inbound event subscriptions from other Banyan services [source: output/phase-4-architecture/services/service-user.md:12].
+> Service-user owns the User Accounts & Authentication bounded context. It is a **pure upstream producer** with no inbound event subscriptions from other Evergreen services [source: output/phase-4-architecture/services/service-user.md:12].
 
 ---
 

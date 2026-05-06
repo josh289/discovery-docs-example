@@ -1,9 +1,9 @@
-# Statement of Work — Bugzilla Modernization to Banyan CQRS/Event Sourcing
+# Statement of Work — Bugzilla Modernization to Evergreen CQRS/Event Sourcing
 
 **Document Date**: 2026-05-06
 **Engagement Type**: Legacy migration — full re-architecture
 **Source**: Bugzilla (Perl monolith, 864 files, 6.3 MB)
-**Target**: Banyan CQRS/Event Sourcing microservices (TypeScript, 7 services)
+**Target**: Evergreen CQRS/Event Sourcing microservices (TypeScript, 7 services)
 **Estimation Method**: OTR Connect Feature Point System (1–8 pts per feature; `~/.claude/skills/estimate/SKILL.md`). Story-point totals are reported per phase. Calendar-time projections are intentionally omitted — they vary too much by team experience with CQRS/Event-Sourcing patterns. As a rough yardstick, assume **~100 story-points per month** of team velocity for an experienced TypeScript / event-sourcing team.
 
 ---
@@ -124,7 +124,7 @@ Both services are pure consumers — disabling them causes no data integrity iss
 
 Story points: 48 pts
 
-This phase covers data migration from the legacy Bugzilla MySQL/PostgreSQL database into the Banyan event store and read models, deployment of a REST compatibility layer for existing client scripts, and the legacy-to-new traffic cutover.
+This phase covers data migration from the legacy Bugzilla MySQL/PostgreSQL database into the Evergreen event store and read models, deployment of a REST compatibility layer for existing client scripts, and the legacy-to-new traffic cutover.
 
 | Feature | Tier | Points | Source |
 |---------|------|--------|--------|
@@ -133,7 +133,7 @@ This phase covers data migration from the legacy Bugzilla MySQL/PostgreSQL datab
 | Binary attachment migration (DB BLOB + filesystem → S3/MinIO) | Large | 6 | `output/phase-4-architecture/services/service-attachment.md` — Binary Storage Strategy / Migration from Bugzilla |
 | REST compatibility layer — legacy `/rest/*` shim mapping snake_case + integer IDs → camelCase + UUID | Large | 8 | `audit-output/integration-surface.md` — REST Endpoints table (40+ endpoints); Compatibility Requirements section |
 | Field name mapping (snake_case → camelCase) + ID format (integer → UUID) in compat layer | Medium | 5 | `audit-output/integration-surface.md` — Wire-Format Constraints: Field Names, Field Types |
-| API gateway routing configuration — map REST/XMLRPC/JSONRPC paths to Banyan command/query contracts | Large | 6 | `audit-output/integration-surface.md` — API Surface Inventory (40+ REST endpoints) |
+| API gateway routing configuration — map REST/XMLRPC/JSONRPC paths to Evergreen command/query contracts | Large | 6 | `audit-output/integration-surface.md` — API Surface Inventory (40+ REST endpoints) |
 | LDAP/RADIUS gateway adapters | Medium | 4 | `output/phase-4-architecture/services/service-user.md` — "LDAP/RADIUS/Env authentication becomes an API gateway concern"; `audit-output/integration-surface.md` — LDAP Directory, RADIUS Authentication Server |
 | Email notification format preservation (subject, body template, threading headers) | Medium | 4 | `audit-output/integration-surface.md` — SMTP Outbound Email Notifications; Wire-Format Constraints |
 | Co-existence testing — parallel-run legacy + new, compare outputs for correctness | Medium | 3 | `audit-output/integration-surface.md` — Preserve vs. Redesign Matrix |
@@ -227,7 +227,7 @@ The following wire formats MUST be preserved during migration to maintain compat
 
 | Format / Contract | Preserve Scope | Migration Strategy | Source |
 |-------------------|---------------|-------------------|--------|
-| REST API paths (`/rest/bug/*`, `/rest/user/*`, `/rest/product/*`, `/rest/group/*`, `/rest/component/*`, `/rest/classification/*`, `/rest/flag_type/*`) | Wire-compatible: same paths, JSON response structure | Compatibility shim at API gateway mapping legacy paths to Banyan commands/queries | `audit-output/integration-surface.md` — REST Endpoints table (40+ endpoints) |
+| REST API paths (`/rest/bug/*`, `/rest/user/*`, `/rest/product/*`, `/rest/group/*`, `/rest/component/*`, `/rest/classification/*`, `/rest/flag_type/*`) | Wire-compatible: same paths, JSON response structure | Compatibility shim at API gateway mapping legacy paths to Evergreen commands/queries | `audit-output/integration-surface.md` — REST Endpoints table (40+ endpoints) |
 | Field names (snake_case: `bug_id`, `creation_time`, `is_open`) | Preserve in `/rest/` compat layer; new v2 API uses camelCase | Field name mapping in compat layer | `audit-output/integration-surface.md` — Wire-Format Constraints: Field Names |
 | ID format (integer bug IDs) | Preserve in compat layer; new API uses UUID strings | ID mapping table (integer → UUID) in compat layer | `audit-output/integration-surface.md` — Wire-Format Constraints: Field Types |
 | ISO 8601 date format | Preserve exactly | Direct pass-through | `audit-output/integration-surface.md` — Wire-Format Constraints: Date Format |
@@ -248,7 +248,7 @@ The following wire formats MUST be preserved during migration to maintain compat
 
 ## Migration Sequencing
 
-The migration follows a **strangler fig** pattern: the new Banyan services are deployed alongside the legacy Bugzilla instance. Traffic is gradually shifted from the legacy system to the new services. The legacy instance remains operational until all traffic is migrated and verified.
+The migration follows a **strangler fig** pattern: the new Evergreen services are deployed alongside the legacy Bugzilla instance. Traffic is gradually shifted from the legacy system to the new services. The legacy instance remains operational until all traffic is migrated and verified.
 
 ### Sequencing Order
 
@@ -258,25 +258,25 @@ The migration follows a **strangler fig** pattern: the new Banyan services are d
 | 2 | Deploy service-bug + service-comment + service-attachment. Seed local read models from service-user/product events. | Legacy Bugzilla continues handling all traffic. New services are "warm" but receive no user requests. | Phase 2 |
 | 3 | Deploy service-search + service-notification. Subscribe to all event streams. Elasticsearch seeded from legacy data snapshot. | Legacy Bugzilla still primary. New search + notifications running in shadow mode (events consumed but emails suppressed). | Phase 3 |
 | 4a | Data migration ETL: bulk-export legacy MySQL → seed event store + read models + Elasticsearch. Verify data integrity. | Legacy Bugzilla frozen (read-only mode). New system loaded with historical data. | Phase 4, step 1 |
-| 4b | Deploy REST compatibility layer at API gateway. Route `/rest/*` traffic to Banyan services. | Legacy Bugzilla still running (fallback). All new API traffic goes to Banyan. | Phase 4, step 2 |
+| 4b | Deploy REST compatibility layer at API gateway. Route `/rest/*` traffic to Evergreen services. | Legacy Bugzilla still running (fallback). All new API traffic goes to Evergreen. | Phase 4, step 2 |
 | 4c | Parallel-run period: both systems receive traffic. New system is primary; legacy is shadow/fallback. | New system handles reads + writes. Legacy system available for emergency rollback. | Phase 4, step 3 |
-| 5 | Customer sign-off. Decommission legacy Bugzilla. Remove compatibility shim (optional). | Only Banyan services remain. Legacy instance shut down. | Post-Phase 4 |
+| 5 | Customer sign-off. Decommission legacy Bugzilla. Remove compatibility shim (optional). | Only Evergreen services remain. Legacy instance shut down. | Post-Phase 4 |
 
 ### Co-existence Guarantees
 
 During the parallel-run period (steps 4b–4c):
 
-1. **Write-through**: All writes go to Banyan services only. Legacy Bugzilla is read-only.
-2. **Read consistency**: API gateway routes reads to Banyan. If Banyan returns 5xx, gateway falls back to legacy read-only instance (stale data acceptable during fallback).
-3. **Email deduplication**: During shadow mode, email notifications are sent from one system only (Banyan after step 4b; legacy before).
+1. **Write-through**: All writes go to Evergreen services only. Legacy Bugzilla is read-only.
+2. **Read consistency**: API gateway routes reads to Evergreen. If Evergreen returns 5xx, gateway falls back to legacy read-only instance (stale data acceptable during fallback).
+3. **Email deduplication**: During shadow mode, email notifications are sent from one system only (Evergreen after step 4b; legacy before).
 4. **Search index**: Elasticsearch is the sole search provider after step 4a. Legacy `bugs_fulltext` is not updated after data migration.
-5. **Data integrity**: A nightly reconciliation job compares Banyan read model counts against legacy database counts. Discrepancy >0.1% triggers an alert.
+5. **Data integrity**: A nightly reconciliation job compares Evergreen read model counts against legacy database counts. Discrepancy >0.1% triggers an alert.
 
 ### Legacy Retirement Order
 
 1. **First**: Legacy email notification pipeline (BugMail + TheSchwartz) — replaced by service-notification
 2. **Second**: Legacy search engine (Search.pm + bugs_fulltext) — replaced by service-search + Elasticsearch
-3. **Third**: Legacy REST/XMLRPC/JSONRPC API surface — replaced by API gateway + Banyan services
+3. **Third**: Legacy REST/XMLRPC/JSONRPC API surface — replaced by API gateway + Evergreen services
 4. **Fourth**: Legacy Perl application (CGI/PSGI + Template Toolkit) — replaced by React SPA (separate frontend track)
 5. **Last**: Legacy MySQL/PostgreSQL database — retained until data migration is verified and sign-off received, then archived
 
@@ -316,10 +316,10 @@ During the parallel-run period (steps 4b–4c):
 | Aspect | Detail |
 |--------|--------|
 | **Checkpoint format** | Data migration script tagged. Legacy database snapshot (full `mysqldump`/`pg_dump`). API gateway routing table snapshot. |
-| **Reversible state** | Before step 4c (parallel-run): all Banyan services can be torn down and rebuilt from event store replay. |
+| **Reversible state** | Before step 4c (parallel-run): all Evergreen services can be torn down and rebuilt from event store replay. |
 | **Irreversible state** | After step 4c sign-off: legacy Bugzilla decommissioned. Mitigation: retain archived database dump for 90 days post-decommission. Event store provides full audit trail. |
 | **Mitigation** | Parallel-run period allows comparison of legacy vs. new outputs. Customer must sign off before legacy decommission. If reconciliation job shows >0.1% discrepancy, halt cutover and investigate. |
-| **Rollback procedure** | (1) Re-route DNS/load balancer to legacy Bugzilla instance. (2) Re-enable legacy Bugzilla write mode. (3) Disable Banyan API gateway routing. (4) Investigate data drift during parallel-run period. |
+| **Rollback procedure** | (1) Re-route DNS/load balancer to legacy Bugzilla instance. (2) Re-enable legacy Bugzilla write mode. (3) Disable Evergreen API gateway routing. (4) Investigate data drift during parallel-run period. |
 
 ---
 
@@ -337,7 +337,7 @@ The following observable conditions require a formal change-order conversation b
 | 6 | **SLO tightening** — performance requirements change (e.g., search latency <200ms instead of <1s; notification delivery <5s instead of <30s) | Customer or stakeholder revises performance requirements | Re-estimate affected service(s). Search latency changes affect Phase 3 (service-search + Elasticsearch). Notification latency changes affect Phase 3 (service-notification + SMTP). Issue change-order. |
 | 7 | **Spec readiness gate failure** — spec gaps identified in `output/phase-6-spec-readiness/readiness-report.md` are not resolved before Phase 2 begins | Gate 1 (aggregate signatures) or Gate 3 (contract code blocks) remain FAIL | Pause implementation. Return to specification phase. Estimated fix: 2–3 days of spec writing per service. Issue change-order if delay exceeds 5 business days. |
 | 8 | **Data migration quality issues** — legacy data contains quality problems not anticipated in the ETL design (corrupt attachments, orphan references, encoding issues) | Data migration ETL error rate >0.1% on first production run | Investigate and fix ETL. Add data cleansing steps. Issue change-order if cleansing adds >4 pts. |
-| 9 | **Platform dependency version change** — Banyan platform (`@banyanai/platform-base-service`, `@banyanai/platform-event-sourcing`) releases a breaking change | `pnpm install` fails or behavioral tests break after platform upgrade | Pin platform versions. Evaluate upgrade impact. Issue change-order if migration to new platform APIs adds >4 pts per service. |
+| 9 | **Platform dependency version change** — Evergreen platform (`@evergreen/platform-base-service`, `@evergreen/platform-event-sourcing`) releases a breaking change | `pnpm install` fails or behavioral tests break after platform upgrade | Pin platform versions. Evaluate upgrade impact. Issue change-order if migration to new platform APIs adds >4 pts per service. |
 | 10 | **Customer-requested feature addition** — new features requested after specification freeze (e.g., Voting extension per `output/phase-3-clarification/clarification.md` Q13, API key scoping per Q15) | Customer formal request for previously deferred feature | Estimate points. Add to backlog. Issue change-order. Deferred features are explicitly excluded from current SOW scope. |
 
 ---
@@ -370,8 +370,8 @@ The risk register at `audit-output/risk-register.md` (W1, 20 risks R-001..R-020)
 ### Downtime / cutover risks (affect §Migration Sequencing and §Rollback Boundaries)
 
 - **R-010 (H × H)** — see above.
-- **R-020 (M × M) — Secrets management gap for `localconfig` replacement** [`audit-output/risk-register.md` row R-020]: If runtime secret rotation requires service restarts, factor into Phase 4 cutover runbook. May trigger Change-Order Trigger #2 (Undocumented integration discovered) if Banyan platform docs reveal a different rotation model than expected.
-- **R-014 (M × H) — Memcached global state has no Banyan equivalent** [`audit-output/risk-register.md` row R-014]: Drives the projection-lag SLO assumption baked into the Phase 1→Phase 2 gate exit criterion (read models must use real-time projection, alert on >5 s lag for security-critical models).
+- **R-020 (M × M) — Secrets management gap for `localconfig` replacement** [`audit-output/risk-register.md` row R-020]: If runtime secret rotation requires service restarts, factor into Phase 4 cutover runbook. May trigger Change-Order Trigger #2 (Undocumented integration discovered) if Evergreen platform docs reveal a different rotation model than expected.
+- **R-014 (M × H) — Memcached global state has no Evergreen equivalent** [`audit-output/risk-register.md` row R-014]: Drives the projection-lag SLO assumption baked into the Phase 1→Phase 2 gate exit criterion (read models must use real-time projection, alert on >5 s lag for security-critical models).
 
 ### Items considered and excluded
 

@@ -4,7 +4,7 @@
 
 The `discovery/` directory contains a single legacy application: **Bugzilla**, the open-source Perl-based bug-tracking system (250 source files, ~111 kLOC across `.pm`, `.cgi`, `.pl`). The codebase was imported as a single bulk snapshot on 2026-05-05; the `discovery/bugzilla/` path is excluded from git tracking (`.gitignore`), so every file reports `(unversioned)` for author and zero churn. There are no git commits to draw stability signals from — the heuristic falls back to test proximity and architectural analysis.
 
-This is a **legacy migration** source: the entire Bugzilla Perl codebase serves as input to the Evergreen factory, which re-architects it as Banyan CQRS/Event Sourcing microservices in TypeScript. The bounded contexts identified during discovery (see `output/phase-1-discovery/discovery.md`) define the cluster boundaries below.
+This is a **legacy migration** source: the entire Bugzilla Perl codebase serves as input to the audit pipeline, which re-architects it as Evergreen CQRS/Event Sourcing microservices in TypeScript. The bounded contexts identified during discovery (see `output/phase-1-discovery/discovery.md`) define the cluster boundaries below.
 
 ## Clusters
 
@@ -18,7 +18,7 @@ This is a **legacy migration** source: the entire Bugzilla Perl codebase serves 
 
 - **service-comment** — Append-only comment thread on bugs, including privacy (insider groups), user-applied tags, and tag weighting. The smallest domain cluster at 724 total LOC. Comments are immutable after creation (body cannot be edited, only privacy toggled).
 
-- **service-search** — The boolean-chart SQL generation engine (`Bugzilla::Search` at 3 561 LOC), quicksearch, saved/shared queries, chart/reporting, and series data. Primarily a query-side concern. The search engine is a pure SQL-generation pipeline with 25+ operators that would be substantially rewritten or replaced in the Banyan migration. Has the only meaningful integration test in the codebase (`xt/search.t`).
+- **service-search** — The boolean-chart SQL generation engine (`Bugzilla::Search` at 3 561 LOC), quicksearch, saved/shared queries, chart/reporting, and series data. Primarily a query-side concern. The search engine is a pure SQL-generation pipeline with 25+ operators that would be substantially rewritten or replaced in the Evergreen migration. Has the only meaningful integration test in the codebase (`xt/search.t`).
 
 - **service-notification** — Email notification pipeline, scheduled reports (whine system), and background job queue (TheSchwartz). A pure event consumer that computes recipients, renders per-user templated emails, and manages cron-driven scheduled reports. Depends on domain events from bug, comment, attachment, and user services.
 
@@ -200,13 +200,13 @@ This is a **legacy migration** source: the entire Bugzilla Perl codebase serves 
 
 - **Password hash auto-upgrade on login**: The DB verifier auto-upgrades password hashes (old algorithm → SHA-256 with salt) on successful login — a write side effect hidden inside an authentication read path. *(see output/phase-2-exploration/slices/user-accounts-auth.md line 374)*
 
-- **Environment variable auth (`Login::Env`)**: The `auth_env_id`, `auth_env_email`, `auth_env_realname` environment variables are read at authentication time for SSO proxy integration. In Banyan, this would need gateway-level extraction. *(see output/phase-2-exploration/slices/user-accounts-auth.md line 77)*
+- **Environment variable auth (`Login::Env`)**: The `auth_env_id`, `auth_env_email`, `auth_env_realname` environment variables are read at authentication time for SSO proxy integration. In Evergreen, this would need gateway-level extraction. *(see output/phase-2-exploration/slices/user-accounts-auth.md line 77)*
 
 - **Attachment/Flag changes logged to `bugs_activity`**: Both attachment and flag mutations write to the shared `bugs_activity` table (prefixed with `attachments.` or `flagtypes.name`), then flush memcached. The activity log is owned by the bug domain but written from attachment/flag code. *(see output/phase-2-exploration/slices/attachments-flags.md line 184)*
 
 - **Extension `disabled` file check at load time**: A `disabled` file in the extension directory causes Bugzilla to skip the extension entirely during module loading — a filesystem-based configuration side effect at import time. *(see output/phase-2-exploration/slices/extension-system.md line 29)*
 
-- **`localconfig` read once at startup**: Configuration secrets (DB credentials, etc.) are read from `localconfig` once at startup and cached for the process lifetime. Banyan services will need secret rotation support. *(see output/phase-2-exploration/slices/platform-infrastructure.md line 247)*
+- **`localconfig` read once at startup**: Configuration secrets (DB credentials, etc.) are read from `localconfig` once at startup and cached for the process lifetime. Evergreen services will need secret rotation support. *(see output/phase-2-exploration/slices/platform-infrastructure.md line 247)*
 
 ## Stability Ratings
 

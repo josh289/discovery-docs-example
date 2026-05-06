@@ -7,7 +7,7 @@
 
 ## Workflow Overview
 
-This workflow models the complete lifecycle of a Bugzilla bug as it traverses the Banyan CQRS/Event Sourcing microservice architecture. It spans **six services**: `service-bug` (initiator and primary owner), `service-product` (configuration and validation), `service-user` (identity and group membership), `service-comment` (discussion thread), `service-attachment` (files and flags), and `service-notification` (email delivery).
+This workflow models the complete lifecycle of a Bugzilla bug as it traverses the Evergreen CQRS/Event Sourcing microservice architecture. It spans **six services**: `service-bug` (initiator and primary owner), `service-product` (configuration and validation), `service-user` (identity and group membership), `service-comment` (discussion thread), `service-attachment` (files and flags), and `service-notification` (email delivery).
 
 The workflow is **event-driven** — each primary action (creation, update, status transition, comment, attachment) emits domain events that are consumed by downstream services via RabbitMQ subscriptions. Cross-service handoff happens exclusively through events and locally projected read models; there are no synchronous service-to-service calls in the hot notification path (ADR-012).
 

@@ -22,6 +22,10 @@ An instruction to change the state of the system — for example, "create a bug"
 
 Short for Command Query Responsibility Segregation — a pattern that separates operations that change data (commands) from operations that read data (queries). The write side (aggregates, event store) and the read side (read models, projections) are optimized independently. [source: output/phase-4-architecture/services/service-bug.md]
 
+### Evergreen (framework)
+
+Greenfield Labs's proprietary framework for building production services in **TypeScript** and **.NET**. Provides CQRS, Event Sourcing, read-model projections, message bus integration, and an opinionated service skeleton (decorator-driven aggregates, command/query handlers, event subscribers, read models). The recommended target architecture for this audit is built on the Evergreen platform; service contracts are published as `@evergreen/service-{name}-contracts` and runtime libraries as `@evergreen/platform-*`. Earlier audit drafts referred to this framework as "Banyan"; the canonical name is **Evergreen**.
+
 ### Event
 
 An immutable record of something that happened in the system — for example, "BugCreated" or "CommentAdded." Events are the source of truth in an event-sourced system: the current state of any aggregate is computed by replaying its event history. [source: output/phase-5-specification/specs/service-bug/SERVICE_SPEC.md]
@@ -48,7 +52,7 @@ An independently deployable unit of software that owns a bounded context. In thi
 
 ### Wire Format
 
-The encoding and protocol used to send data over the network between systems. Bugzilla's legacy wire formats include REST (JSON over HTTP), XMLRPC, and JSONRPC. In Banyan, the wire format is JSON over HTTPS via an API gateway that routes to individual services. [source: audit-output/integration-surface.md]
+The encoding and protocol used to send data over the network between systems. Bugzilla's legacy wire formats include REST (JSON over HTTP), XMLRPC, and JSONRPC. In Evergreen, the wire format is JSON over HTTPS via an API gateway that routes to individual services. [source: audit-output/integration-surface.md]
 
 ### Component
 
