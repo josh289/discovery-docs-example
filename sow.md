@@ -4,8 +4,7 @@
 **Engagement Type**: Legacy migration — full re-architecture
 **Source**: Bugzilla (Perl monolith, 864 files, 6.3 MB)
 **Target**: Banyan CQRS/Event Sourcing microservices (TypeScript, 7 services)
-**Estimation Method**: OTR Connect Feature Point System (8 pts = 1 dev-month; `~/.claude/skills/estimate/SKILL.md`)
-**Assumed Team Size**: 3 developers (full-stack, TypeScript/CQRS-capable)
+**Estimation Method**: OTR Connect Feature Point System (1–8 pts per feature; `~/.claude/skills/estimate/SKILL.md`). Story-point totals are reported per phase. Calendar-time projections are intentionally omitted — they vary too much by team experience with CQRS/Event-Sourcing patterns. As a rough yardstick, assume **~100 story-points per month** of team velocity for an experienced TypeScript / event-sourcing team.
 
 ---
 
@@ -18,7 +17,6 @@ The migration is sequenced into **4 phases** ordered by dependency depth: founda
 ### Phase 1 — Foundation Services (service-user, service-product)
 
 Story points: 94 pts
-Duration: ~3.9 months (~17 weeks at 3 devs, 24 pts/dev-month)
 
 These two services have zero inbound cross-service dependencies (service-user is a pure producer; service-product depends only on service-user events). They must be running and emitting events before any other service can begin integration testing.
 
@@ -53,7 +51,6 @@ Both services are greenfield — no legacy state to preserve. If Phase 1 fails q
 ### Phase 2 — Core Domain (service-bug, service-comment, service-attachment)
 
 Story points: 133 pts
-Duration: ~5.5 months (~24 weeks at 3 devs, 24 pts/dev-month)
 
 These three services form the core bug-tracking domain. They depend on service-user and service-product events (projected into local read models) and on each other's events for cross-cutting concerns (comment creation triggers fulltext sync; attachment events trigger system comments).
 
@@ -96,7 +93,6 @@ At this phase, services are deployed but no legacy system data has been migrated
 ### Phase 3 — Query & Notification Leaves (service-search, service-notification)
 
 Story points: 74 pts
-Duration: ~3.1 months (~13 weeks at 3 devs, 24 pts/dev-month)
 
 These are leaf services with no downstream dependents. They subscribe to events from all prior services. They can be built in parallel once Phase 2 services emit events.
 
@@ -127,7 +123,6 @@ Both services are pure consumers — disabling them causes no data integrity iss
 ### Phase 4 — Migration Cutover & Compatibility Layer
 
 Story points: 48 pts
-Duration: ~2.0 months (~9 weeks at 3 devs, 24 pts/dev-month)
 
 This phase covers data migration from the legacy Bugzilla MySQL/PostgreSQL database into the Banyan event store and read models, deployment of a REST compatibility layer for existing client scripts, and the legacy-to-new traffic cutover.
 
@@ -150,7 +145,8 @@ The legacy Bugzilla instance remains running throughout Phase 4. If cutover fail
 ---
 
 **Grand Total**: 94 + 133 + 74 + 48 = **349 story points**
-**Total Duration**: 349 pts ÷ (8 pts/dev-month × 3 devs) = **~14.5 months (~63 weeks) at 3 developers**
+
+At the velocity yardstick noted in the header (~100 pts/month, experienced team), this is roughly a **~3.5-month engagement**. Faster or slower teams should rescale linearly. This is the only calendar-time figure in the document; per-phase month-counts have intentionally been removed because they varied too widely by team to be useful as commitments.
 
 ---
 
@@ -261,9 +257,9 @@ The migration follows a **strangler fig** pattern: the new Banyan services are d
 | 1 | Deploy service-user + service-product. Both are greenfield; no legacy interaction. | Legacy Bugzilla runs untouched. New services emit events into empty RabbitMQ. | Phase 1 |
 | 2 | Deploy service-bug + service-comment + service-attachment. Seed local read models from service-user/product events. | Legacy Bugzilla continues handling all traffic. New services are "warm" but receive no user requests. | Phase 2 |
 | 3 | Deploy service-search + service-notification. Subscribe to all event streams. Elasticsearch seeded from legacy data snapshot. | Legacy Bugzilla still primary. New search + notifications running in shadow mode (events consumed but emails suppressed). | Phase 3 |
-| 4a | Data migration ETL: bulk-export legacy MySQL → seed event store + read models + Elasticsearch. Verify data integrity. | Legacy Bugzilla frozen (read-only mode). New system loaded with historical data. | Phase 4, step 1 (~1 week) |
-| 4b | Deploy REST compatibility layer at API gateway. Route `/rest/*` traffic to Banyan services. | Legacy Bugzilla still running (fallback). All new API traffic goes to Banyan. | Phase 4, step 2 (~1 week) |
-| 4c | Parallel-run period: both systems receive traffic. New system is primary; legacy is shadow/fallback. | New system handles reads + writes. Legacy system available for emergency rollback. | Phase 4, step 3 (~1 week) |
+| 4a | Data migration ETL: bulk-export legacy MySQL → seed event store + read models + Elasticsearch. Verify data integrity. | Legacy Bugzilla frozen (read-only mode). New system loaded with historical data. | Phase 4, step 1 |
+| 4b | Deploy REST compatibility layer at API gateway. Route `/rest/*` traffic to Banyan services. | Legacy Bugzilla still running (fallback). All new API traffic goes to Banyan. | Phase 4, step 2 |
+| 4c | Parallel-run period: both systems receive traffic. New system is primary; legacy is shadow/fallback. | New system handles reads + writes. Legacy system available for emergency rollback. | Phase 4, step 3 |
 | 5 | Customer sign-off. Decommission legacy Bugzilla. Remove compatibility shim (optional). | Only Banyan services remain. Legacy instance shut down. | Post-Phase 4 |
 
 ### Co-existence Guarantees
