@@ -20,7 +20,7 @@ This repository is an **example deliverable** — what a modernization-audit eng
 
 - **[Domain Model](domain-model/README.md)** — per-service Mermaid class diagrams (7 services), cross-context FK map, 37 invariants extracted from specs.
 - **[C4 Architecture](c4/README.md)** — Context, Container, Component diagrams + 2 code-level dives (BugAggregate, AttachmentAggregate). Stability annotations from cluster inventory.
-- **[Workflows](workflows/)** — 3 BPMN workflows (bug lifecycle, flag review/approval, product creation saga) with `cite:` fields linking gateway logic to specific business rules.
+- **[Workflows](workflows/)** — 3 BPMN workflows and companion .md/mermaid files (bug lifecycle, flag review/approval, product creation saga) with `cite:` fields linking gateway logic to specific business rules.
 - **[Architecture Decision Records (ADRs)](adrs/README.md)** — 8 ADRs covering service boundaries, event sourcing strategy, workflow ownership, search engine choice, flag ownership, group permission split, event payload design, and user identity. Each ADR follows Status/Context/Decision/Consequences format.
 - **[User Journeys](journeys/)** — 7 end-to-end user journeys with `## Workflow & Rules Cross-References` sections mapping each step to its workflow gateway and decision rule.
 
@@ -62,10 +62,10 @@ See [appendices/methodology.md](appendices/methodology.md) for full methodology.
 
 ## Caveats
 
-- **Citation precision**: file paths in `[source: path:line]` references are reliable; line numbers occasionally drift (typically 4–14 lines, occasionally more) when source files were edited during audit generation. Treat citations as file-pointers and use the section headings to locate the exact content.
+- **Citation precision**: file paths in `[source: path:line]` references are reliable; line numbers occasionally drift (typically within 10 lines, occasionally more) when source files were edited during audit generation. Treat citations as file-pointers and use the section headings to locate the exact content.
 - **Stability ratings**: most are marked "unknown" because the source Bugzilla checkout is unversioned (no git history available for churn analysis).
 - **Inferred services**: three services (attachment, search, notification) were inferred from cross-context references during the architecture phase. They were later first-classed during the audit's domain-model and C4 phases — they are now treated as fully-materialized services in this audit.
-- **Story-point estimates**: use the OTR Connect Feature Point System (1–8 points per feature). The SOW is reported in story-points only; calendar time is given as a single rough engagement estimate at the document head (~100 story-points/month team velocity for an experienced TypeScript / event-sourcing team). Faster or slower teams should rescale.
+- **Story-point estimates**: use a 1–8 feature-point scale. The SOW is reported in story-points only; calendar time is given as a single rough engagement estimate at the document head (~100 story-points/month team velocity for an experienced TypeScript / event-sourcing team). Faster or slower teams should rescale.
 
 ## Source
 
